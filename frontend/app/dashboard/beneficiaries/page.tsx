@@ -1,0 +1,566 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import SearchBar from '@/components/ui/SearchBar';
+import Modal from '@/components/ui/Modal';
+import Input from '@/components/ui/Input';
+import Alert from '@/components/ui/Alert';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { beneficiariesService } from '@/services/beneficiaries.service';
+import { clientsService } from '@/services/clients.service';
+import { Beneficiary } from '@/types/beneficiary';
+import { Client } from '@/types/client';
+
+export default function BeneficiariesPage() {
+    const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+    const [filteredBeneficiaries, setFilteredBeneficiaries] = useState<Beneficiary[]>([]);
+    const [clients, setClients] = useState<Client[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingBeneficiary, setEditingBeneficiary] = useState<Beneficiary | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [formData, setFormData] = useState<any>({
+        fullName: '',
+        documentId: '',
+        bankName: '',
+        accountNumber: '',
+        accountType: 'ahorro',
+        phone: '',
+        clientColombiaId: '',
+    });
+    const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+    const [alertState, setAlertState] = useState<{ isOpen: boolean; message: string; variant?: 'error' | 'success' | 'warning' | 'info' }>({
+        isOpen: false,
+        message: '',
+        variant: 'info'
+    });
+    const [confirmState, setConfirmState] = useState<{ isOpen: boolean; message: string; onConfirm: () => void }>({
+        isOpen: false,
+        message: '',
+        onConfirm: () => {}
+    });
+    const [selectedBeneficiary, setSelectedBeneficiary] = useState<Beneficiary | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        try {
+            const [beneficiariesData, clientsData] = await Promise.all([
+                beneficiariesService.getBeneficiaries(),
+                clientsService.getClients(),
+            ]);
+            setBeneficiaries(beneficiariesData);
+            setFilteredBeneficiaries(beneficiariesData);
+            setClients(clientsData);
+        } catch (error) {
+            console.error('Error loading data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+        setCurrentPage(1); // Reset to first page on search
+        if (!query.trim()) {
+            setFilteredBeneficiaries(beneficiaries);
+            return;
+        }
+
+        const filtered = beneficiaries.filter(ben =>
+            ben.fullName.toLowerCase().includes(query.toLowerCase()) ||
+            ben.documentId.includes(query) ||
+            ben.bankName.toLowerCase().includes(query.toLowerCase()) ||
+            ben.accountNumber.includes(query)
+        );
+        setFilteredBeneficiaries(filtered);
+    };
+
+    const handleViewDetails = (beneficiary: Beneficiary) => {
+        setSelectedBeneficiary(beneficiary);
+        setIsDetailModalOpen(true);
+    };
+
+    // Pagination logic
+    const totalPages = Math.ceil(filteredBeneficiaries.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentBeneficiaries = filteredBeneficiaries.slice(startIndex, endIndex);
+
+    const openCreateModal = () => {
+        setEditingBeneficiary(null);
+        setFormData({
+            fullName: '',
+            documentId: '',
+            bankName: '',
+            accountNumber: '',
+            accountType: 'ahorro',
+            phone: '',
+            clientColombiaId: '',
+        });
+        setFormErrors({});
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = (beneficiary: Beneficiary) => {
+        setEditingBeneficiary(beneficiary);
+        setFormData({
+            fullName: beneficiary.fullName,
+            documentId: beneficiary.documentId,
+            bankName: beneficiary.bankName,
+            accountNumber: beneficiary.accountNumber,
+            accountType: beneficiary.accountType,
+            phone: beneficiary.phone || '',
+            clientColombiaId: beneficiary.clientColombia?.id || '',
+        });
+        setFormErrors({});
+        setIsModalOpen(true);
+    };
+
+    const validateForm = (): boolean => {
+        const errors: Record<string, string> = {};
+
+        if (!formData.fullName.trim()) {
+            errors.fullName = 'El nombre es requerido';
+        }
+
+        if (!formData.documentId.trim()) {
+            errors.documentId = 'El documento es requerido';
+        }
+
+        if (!formData.bankName.trim()) {
+            errors.bankName = 'El banco es requerido';
+        }
+
+        if (!formData.accountNumber.trim()) {
+            errors.accountNumber = 'El número de cuenta es requerido';
+        } else if (!/^\d{20}$/.test(formData.accountNumber)) {
+            errors.accountNumber = 'El número de cuenta debe tener 20 dígitos';
+        }
+
+        if (!formData.clientColombiaId) {
+            errors.clientColombiaId = 'Debes seleccionar un cliente';
+        }
+
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!validateForm()) return;
+
+        setSaving(true);
+        try {
+            const dataToSend = {
+                ...formData,
+                clientColombiaId: Number(formData.clientColombiaId),
+            };
+
+            if (editingBeneficiary) {
+                await beneficiariesService.updateBeneficiary(editingBeneficiary.id, dataToSend);
+            } else {
+                await beneficiariesService.createBeneficiary(dataToSend);
+            }
+            await loadData();
+            setIsModalOpen(false);
+        } catch (error: any) {
+            console.error('Error saving beneficiary:', error);
+            setFormErrors({
+                general: error.response?.data?.message || 'Error al guardar el destinatario',
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+
+    return (
+        <div className="p-4 sm:p-8">
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    Gestión de Destinatarios
+                </h1>
+                <p className="text-gray-600">
+                    Administra los destinatarios en Venezuela
+                </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                    <SearchBar
+                        placeholder="Buscar por nombre, documento, banco o cuenta..."
+                        onSearch={handleSearch}
+                    />
+                </div>
+                <Button onClick={openCreateModal}>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Nuevo Destinatario
+                </Button>
+            </div>
+
+            <Card>
+                {loading ? (
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
+                    </div>
+                ) : filteredBeneficiaries.length === 0 ? (
+                    <div className="text-center py-12">
+                        <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        {searchQuery ? (
+                            <>
+                                <p className="text-gray-500 mb-2">No se encontraron destinatarios con "{searchQuery}"</p>
+                                <p className="text-gray-400 text-sm">Intenta con otro término de búsqueda</p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-gray-500 mb-4">No hay destinatarios registrados</p>
+                                <Button onClick={openCreateModal}>Crear primer destinatario</Button>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                    
+                    <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b-2 border-gray-200">
+                                <tr>
+                                    <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Nombre</th>
+                                    <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Documento</th>
+                                    <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Banco</th>
+                                    <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Cuenta</th>
+                                    <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Cliente</th>
+                                    <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {currentBeneficiaries.map((beneficiary) => (
+                                    <tr key={beneficiary.id} className="hover:bg-gray-50">
+                                        <td className="px-4 lg:px-6 py-4">
+                                            <div className="font-medium text-gray-900 text-sm">{beneficiary.fullName}</div>
+                                            <div className="text-xs text-gray-500">{beneficiary.phone}</div>
+                                        </td>
+                                        <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{beneficiary.documentId}</td>
+                                        <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{beneficiary.bankName}</td>
+                                        <td className="px-4 lg:px-6 py-4">
+                                            <div className="text-gray-900 font-mono text-xs md:text-sm">{beneficiary.accountNumber}</div>
+                                            <div className="text-xs text-gray-500 capitalize">{beneficiary.accountType}</div>
+                                        </td>
+                                        <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">
+                                            {beneficiary.clientColombia?.name || '-'}
+                                        </td>
+                                        <td className="px-4 lg:px-6 py-4 text-right text-xs md:text-sm">
+                                            <div className="flex gap-2 justify-end">
+                                                <button
+                                                    onClick={() => handleViewDetails(beneficiary)}
+                                                    className="text-purple-600 hover:text-purple-900 whitespace-nowrap"
+                                                >
+                                                    Ver detalles
+                                                </button>
+                                                <button onClick={() => openEditModal(beneficiary)} className="text-blue-600 hover:text-blue-900 whitespace-nowrap">
+                                                    Editar
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Mobile list */}
+                    <div className="md:hidden space-y-3">
+                        {currentBeneficiaries.map((beneficiary) => (
+                            <div key={beneficiary.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="font-medium text-gray-900 truncate">{beneficiary.fullName}</div>
+                                        <div className="text-sm text-gray-500 truncate">{beneficiary.bankName} · {beneficiary.accountNumber}</div>
+                                    </div>
+                                    <div className="text-right text-sm text-gray-600">{beneficiary.clientColombia?.name || '-'}</div>
+                                </div>
+                                <div className="mt-3 flex items-center justify-between">
+                                    <div className="text-sm text-gray-600">{beneficiary.documentId}</div>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => handleViewDetails(beneficiary)} className="text-purple-600 hover:text-purple-900">Ver detalles</button>
+                                        <button onClick={() => openEditModal(beneficiary)} className="text-blue-600 hover:text-blue-900">Editar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    </> 
+                )}
+
+                {/* Pagination */}
+                {filteredBeneficiaries.length > itemsPerPage && (
+                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                        <div className="text-sm text-gray-600">
+                            Mostrando {startIndex + 1} - {Math.min(endIndex, filteredBeneficiaries.length)} de {filteredBeneficiaries.length} destinatarios
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Anterior
+                            </button>
+                            <div className="flex gap-1">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        className={`px-3 py-2 text-sm font-medium rounded-lg ${
+                                            currentPage === page
+                                                ? 'bg-blue-600 text-white'
+                                                : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Siguiente
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Card>
+
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title={editingBeneficiary ? 'Editar Destinatario' : 'Nuevo Destinatario'}
+                size="lg"
+            >
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {formErrors.general && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                            {formErrors.general}
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input
+                            label="Nombre completo"
+                            placeholder="Ej: María González"
+                            value={formData.fullName}
+                            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                            error={formErrors.fullName}
+                        />
+
+                        <Input
+                            label="Documento"
+                            placeholder="V-12345678"
+                            value={formData.documentId}
+                            onChange={(e) => setFormData({ ...formData, documentId: e.target.value })}
+                            error={formErrors.documentId}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Input
+                            label="Banco"
+                            placeholder="Banco de Venezuela"
+                            value={formData.bankName}
+                            onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                            error={formErrors.bankName}
+                        />
+
+                        <Input
+                            label="Teléfono (opcional)"
+                            placeholder="04121234567"
+                            value={formData.phone}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            error={formErrors.phone}
+                        />
+                    </div>
+
+                    <Input
+                        label="Número de cuenta (20 dígitos)"
+                        placeholder="01020123456789012345"
+                        value={formData.accountNumber}
+                        onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                        error={formErrors.accountNumber}
+                    />
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Tipo de cuenta
+                        </label>
+                        <select
+                            value={formData.accountType}
+                            onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
+                            className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+                        >
+                            <option value="ahorro">Ahorro</option>
+                            <option value="corriente">Corriente</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Cliente asociado *
+                        </label>
+                        <select
+                            value={formData.clientColombiaId}
+                            onChange={(e) => setFormData({ ...formData, clientColombiaId: e.target.value })}
+                            className={`w-full px-4 py-2.5 border-2 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none ${formErrors.clientColombiaId ? 'border-red-500' : 'border-gray-200'
+                                }`}
+                        >
+                            <option value="">Selecciona un cliente</option>
+                            {clients.map(client => (
+                                <option key={client.id} value={client.id}>{client.name}</option>
+                            ))}
+                        </select>
+                        {formErrors.clientColombiaId && (
+                            <p className="mt-1 text-sm text-red-600">{formErrors.clientColombiaId}</p>
+                        )}
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="flex-1">
+                            Cancelar
+                        </Button>
+                        <Button type="submit" isLoading={saving} className="flex-1">
+                            {editingBeneficiary ? 'Actualizar' : 'Crear'}
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Alert Dialog */}
+            <Alert
+                isOpen={alertState.isOpen}
+                message={alertState.message}
+                variant={alertState.variant}
+                onClose={() => setAlertState({ ...alertState, isOpen: false })}
+            />
+
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={confirmState.isOpen}
+                title="Confirmar eliminación"
+                message={confirmState.message}
+                confirmText="Sí, eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+                onConfirm={confirmState.onConfirm}
+                onCancel={() => setConfirmState({ isOpen: false, message: '', onConfirm: () => {} })}
+            />
+
+            {/* Beneficiary Detail Modal */}
+            <Modal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                title="Detalles del Destinatario"
+                size="lg"
+            >
+                {selectedBeneficiary && (
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
+                            <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                                {selectedBeneficiary.fullName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-bold text-gray-900">{selectedBeneficiary.fullName}</h3>
+                                <p className="text-sm text-gray-500">ID: #{selectedBeneficiary.id}</p>
+                            </div>
+                        </div>
+
+                        {/* Information Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="p-4 bg-gray-50 rounded-xl">
+                                <p className="text-xs text-gray-500 mb-1">Documento</p>
+                                <p className="text-lg font-semibold text-gray-900">{selectedBeneficiary.documentId}</p>
+                            </div>
+
+                            {selectedBeneficiary.phone && (
+                                <div className="p-4 bg-gray-50 rounded-xl">
+                                    <p className="text-xs text-gray-500 mb-1">Teléfono</p>
+                                    <p className="text-lg font-semibold text-gray-900">{selectedBeneficiary.phone}</p>
+                                </div>
+                            )}
+
+                            <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                                <p className="text-xs text-blue-600 mb-1">Banco</p>
+                                <p className="text-lg font-semibold text-blue-900">{selectedBeneficiary.bankName}</p>
+                            </div>
+
+                            <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                                <p className="text-xs text-green-600 mb-1">Número de Cuenta</p>
+                                <p className="text-lg font-mono font-semibold text-green-900">{selectedBeneficiary.accountNumber}</p>
+                            </div>
+
+                            <div className="p-4 bg-gray-50 rounded-xl">
+                                <p className="text-xs text-gray-500 mb-1">Tipo de Cuenta</p>
+                                <p className="text-lg font-semibold text-gray-900 capitalize">{selectedBeneficiary.accountType}</p>
+                            </div>
+
+                            {selectedBeneficiary.clientColombia && (
+                                <div className="p-4 bg-gray-50 rounded-xl">
+                                    <p className="text-xs text-gray-500 mb-1">Cliente</p>
+                                    <p className="text-lg font-semibold text-gray-900">{selectedBeneficiary.clientColombia.name}</p>
+                                </div>
+                            )}
+
+                            <div className="p-4 bg-gray-50 rounded-xl">
+                                <p className="text-xs text-gray-500 mb-1">Fecha de Creación</p>
+                                <p className="text-lg font-semibold text-gray-900">
+                                    {new Date(selectedBeneficiary.createdAt).toLocaleDateString('es-CO', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric'
+                                    })}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsDetailModalOpen(false)}
+                                className="flex-1"
+                            >
+                                Cerrar
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => {
+                                    setIsDetailModalOpen(false);
+                                    openEditModal(selectedBeneficiary);
+                                }}
+                                className="flex-1"
+                            >
+                                Editar Destinatario
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+        </div>
+    );
+}

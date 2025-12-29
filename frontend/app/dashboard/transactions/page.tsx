@@ -1,0 +1,1005 @@
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import Card from '@/components/ui/Card';
+import Badge from '@/components/ui/Badge';
+import SearchBar from '@/components/ui/SearchBar';
+import Alert from '@/components/ui/Alert';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Modal from '@/components/ui/Modal';
+import { transactionsService } from '@/services/transactions.service';
+import { Transaction } from '@/types/transaction';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
+
+export default function TransactionsPage() {
+    const router = useRouter();
+    const { user } = useAuth();
+    const isAdminColombia = user?.role === 'admin_colombia';
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedStatus, setSelectedStatus] = useState<string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [searchQuery, setSearchQuery] = useState('');
+    const itemsPerPage = 5;
+
+    // Date filter states - default to today
+    const getTodayDateString = () => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    };
+    const [startDate, setStartDate] = useState<string>(getTodayDateString());
+    const [endDate, setEndDate] = useState<string>(getTodayDateString());
+    const [alertState, setAlertState] = useState<{ isOpen: boolean; message: string; variant?: 'error' | 'success' | 'warning' | 'info' }>({
+        isOpen: false,
+        message: '',
+        variant: 'info'
+    });
+    const [confirmState, setConfirmState] = useState<{ isOpen: boolean; message: string; onConfirm: () => void }>({
+        isOpen: false,
+        message: '',
+        onConfirm: () => { }
+    });
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [isResendModalOpen, setIsResendModalOpen] = useState(false);
+    const [beneficiaryChanges, setBeneficiaryChanges] = useState<any>({});
+    const [showBeneficiaryChangeWarning, setShowBeneficiaryChangeWarning] = useState(false);
+
+    // Load all transactions (up to 100 for stats)
+    useEffect(() => {
+        loadTransactions();
+
+        const intervalId = setInterval(() => {
+            loadTransactions();
+        }, 60_000);
+
+        return () => clearInterval(intervalId);
+    }, []);
+
+    const loadTransactions = async () => {
+        try {
+            const data = await transactionsService.getTransactions(100, 0);
+            setTransactions(data);
+            // Filters will be applied automatically via useEffect
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Apply all filters
+    const applyFilters = useCallback(() => {
+        let filtered = transactions;
+
+        // Date filter - normalize dates to local timezone for comparison
+        const filterByDate = (tx: Transaction): boolean => {
+            if (!startDate && !endDate) return true;
+
+            // Get transaction date in local timezone
+            const txDate = new Date(tx.createdAt);
+            // Get date string in local timezone (YYYY-MM-DD)
+            const year = txDate.getFullYear();
+            const month = String(txDate.getMonth() + 1).padStart(2, '0');
+            const day = String(txDate.getDate()).padStart(2, '0');
+            const txDateStr = `${year}-${month}-${day}`;
+
+            if (startDate && endDate) {
+                // Compare date strings directly
+                return txDateStr >= startDate && txDateStr <= endDate;
+            }
+            if (startDate) {
+                return txDateStr >= startDate;
+            }
+            if (endDate) {
+                return txDateStr <= endDate;
+            }
+            return true;
+        };
+
+        filtered = filtered.filter(filterByDate);
+
+        // Search filter
+        if (searchQuery.trim()) {
+            filtered = filtered.filter(
+                (t) =>
+                    t.beneficiaryFullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    t.beneficiaryBankName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    t.id.toString().includes(searchQuery)
+            );
+        }
+
+        // Status filter
+        if (selectedStatus !== 'all') {
+            if (selectedStatus === 'pendiente') {
+                // Include both 'pendiente' and 'pendiente_venezuela' when filtering by 'pendiente'
+                filtered = filtered.filter((t) => t.status === 'pendiente' || t.status === 'pendiente_venezuela');
+            } else {
+                filtered = filtered.filter((t) => t.status === selectedStatus);
+            }
+        }
+
+        setFilteredTransactions(filtered);
+        setCurrentPage(1);
+    }, [transactions, searchQuery, selectedStatus, startDate, endDate]);
+
+    // Update filters when dependencies change
+    useEffect(() => {
+        applyFilters();
+    }, [applyFilters]);
+
+    const handleSearch = useCallback((query: string) => {
+        setSearchQuery(query);
+    }, []);
+
+    const handleStatusFilter = useCallback((status: string) => {
+        setSelectedStatus(status);
+    }, []);
+
+    // Helper to determine if a transaction can be edited/cancelled (PENDIENTE within 5 minutes)
+    const canEdit = (transaction: Transaction): boolean => {
+        if (transaction.status !== 'pendiente') {
+            return false;
+        }
+        const now = new Date();
+        const reference = new Date(transaction.lastEditedAt || transaction.createdAt);
+        const diffMinutes = (now.getTime() - reference.getTime()) / (1000 * 60);
+        return diffMinutes < 5;
+    };
+
+    const handleViewDetails = (transaction: Transaction) => {
+        setSelectedTransaction(transaction);
+        setIsDetailModalOpen(true);
+    };
+
+    const handleEdit = (transaction: Transaction) => {
+        if (!canEdit(transaction)) {
+            setAlertState({
+                isOpen: true,
+                message: 'Esta transacción ya no puede ser editada. Solo se pueden editar transacciones en estado PENDIENTE dentro de los primeros 5 minutos.',
+                variant: 'warning'
+            });
+            return;
+        }
+        router.push(`/dashboard/transactions/${transaction.id}/edit`);
+    };
+
+    const handleCancel = (transaction: Transaction) => {
+        if (!canEdit(transaction)) {
+            setAlertState({
+                isOpen: true,
+                message: 'Esta transacción ya no puede ser cancelada. Solo se pueden cancelar transacciones en estado PENDIENTE dentro de los primeros 5 minutos.',
+                variant: 'warning'
+            });
+            return;
+        }
+        setConfirmState({
+            isOpen: true,
+            message: '¿Estás seguro de que deseas cancelar la transferencia? No podras desahacer esta acción.',
+            onConfirm: async () => {
+                try {
+                    await transactionsService.cancelTransaction(transaction.id);
+                    loadTransactions();
+                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
+                } catch (error) {
+                    console.error('Error cancelando la transacción:', error);
+                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
+                    setAlertState({
+                        isOpen: true,
+                        message: 'No se pudo cancelar la transacción.',
+                        variant: 'error'
+                    });
+                }
+            }
+        });
+    };
+
+    const handleResend = (transaction: Transaction) => {
+        setSelectedTransaction(transaction);
+        setBeneficiaryChanges({});
+        setShowBeneficiaryChangeWarning(false);
+        setIsResendModalOpen(true);
+    };
+
+    const handleResendConfirm = async (saveBeneficiaryChanges: boolean = false) => {
+        if (!selectedTransaction) return;
+
+        try {
+            await transactionsService.resendRejectedTransaction(selectedTransaction.id, {
+                ...beneficiaryChanges,
+                saveBeneficiaryChanges,
+            });
+            setIsResendModalOpen(false);
+            setShowBeneficiaryChangeWarning(false);
+            loadTransactions();
+            setAlertState({
+                isOpen: true,
+                message: 'Transacción reenviada exitosamente',
+                variant: 'success'
+            });
+        } catch (error: any) {
+            setAlertState({
+                isOpen: true,
+                message: error.response?.data?.message || 'Error al reenviar la transacción',
+                variant: 'error'
+            });
+        }
+    };
+
+    const checkBeneficiaryChanges = () => {
+        if (!selectedTransaction) return false;
+
+        const hasChanges =
+            (beneficiaryChanges.beneficiaryFullName && beneficiaryChanges.beneficiaryFullName !== selectedTransaction.beneficiaryFullName) ||
+            (beneficiaryChanges.beneficiaryDocumentId && beneficiaryChanges.beneficiaryDocumentId !== selectedTransaction.beneficiaryDocumentId) ||
+            (beneficiaryChanges.beneficiaryBankName && beneficiaryChanges.beneficiaryBankName !== selectedTransaction.beneficiaryBankName) ||
+            (beneficiaryChanges.beneficiaryAccountNumber && beneficiaryChanges.beneficiaryAccountNumber !== selectedTransaction.beneficiaryAccountNumber) ||
+            (beneficiaryChanges.beneficiaryAccountType && beneficiaryChanges.beneficiaryAccountType !== selectedTransaction.beneficiaryAccountType) ||
+            (beneficiaryChanges.beneficiaryPhone && beneficiaryChanges.beneficiaryPhone !== selectedTransaction.beneficiaryPhone);
+
+        return hasChanges;
+    };
+
+    const handleResendSubmit = () => {
+        if (checkBeneficiaryChanges()) {
+            setShowBeneficiaryChangeWarning(true);
+        } else {
+            handleResendConfirm(false);
+        }
+    };
+
+    // Statistics derived from the filtered transaction list (by date)
+    const getDateFilteredTransactions = () => {
+        const filterByDate = (tx: Transaction): boolean => {
+            if (!startDate && !endDate) return true;
+
+            // Get transaction date in local timezone
+            const txDate = new Date(tx.createdAt);
+            // Get date string in local timezone (YYYY-MM-DD)
+            const year = txDate.getFullYear();
+            const month = String(txDate.getMonth() + 1).padStart(2, '0');
+            const day = String(txDate.getDate()).padStart(2, '0');
+            const txDateStr = `${year}-${month}-${day}`;
+
+            if (startDate && endDate) {
+                // Compare date strings directly
+                return txDateStr >= startDate && txDateStr <= endDate;
+            }
+            if (startDate) {
+                return txDateStr >= startDate;
+            }
+            if (endDate) {
+                return txDateStr <= endDate;
+            }
+            return true;
+        };
+        return transactions.filter(filterByDate);
+    };
+
+    const dateFilteredTransactions = getDateFilteredTransactions();
+    const stats = {
+        total: dateFilteredTransactions.length,
+        pendiente: dateFilteredTransactions.filter((t) => t.status === 'pendiente' || t.status === 'pendiente_venezuela').length,
+        rechazado: dateFilteredTransactions.filter((t) => t.status === 'rechazado').length,
+        completado: dateFilteredTransactions.filter((t) => t.status === 'completado').length,
+    };
+
+    // Pagination calculations
+    const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
+
+    return (
+        <div className="p-4 sm:p-8">
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">Historial de Transacciones</h1>
+                <p className="text-gray-600">Consulta todas las transacciones realizadas</p>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
+                <div onClick={() => handleStatusFilter('all')} className="cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all touch-manipulation">
+                    <Card className="p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-gray-600 text-xs sm:text-sm truncate">Total</p>
+                                <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
+                            </div>
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg className="w-4 h-4 sm:w-6 sm:h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+                <div onClick={() => handleStatusFilter('pendiente')} className="cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all touch-manipulation">
+                    <Card className="p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-gray-600 text-xs sm:text-sm truncate">Pendientes</p>
+                                <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.pendiente}</p>
+                            </div>
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+                <div onClick={() => handleStatusFilter('rechazado')} className="cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all touch-manipulation">
+                    <Card className="p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-gray-600 text-xs sm:text-sm truncate">Rechazadas</p>
+                                <p className="text-xl sm:text-2xl font-bold text-red-600">{stats.rechazado}</p>
+                            </div>
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+                <div onClick={() => handleStatusFilter('completado')} className="cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all touch-manipulation">
+                    <Card className="p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-gray-600 text-xs sm:text-sm truncate">Completadas</p>
+                                <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.completado}</p>
+                            </div>
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+
+            {/* Search */}
+            <div className="mb-4 sm:mb-6">
+                <SearchBar placeholder="Buscar por Destinatario, banco o ID..." onSearch={handleSearch} />
+            </div>
+
+            {/* Date Filters */}
+            <Card className="p-3 sm:p-4 mb-4 sm:mb-6">
+                <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-3">Filtros de Fecha</h3>
+
+                {/* Quick Filters */}
+                <div className="mb-3 sm:mb-4">
+                    <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Filtros Rápidos</p>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                        <button
+                            onClick={() => {
+                                const today = new Date();
+                                const todayStr = today.toISOString().split('T')[0];
+                                setStartDate(todayStr);
+                                setEndDate(todayStr);
+                            }}
+                            className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${(() => {
+                                const today = new Date();
+                                const todayStr = today.toISOString().split('T')[0];
+                                return startDate === todayStr && endDate === todayStr;
+                            })()
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                }`}
+                        >
+                            Hoy
+                        </button>
+                        <button
+                            onClick={() => {
+                                const today = new Date();
+                                const fifteenDaysAgo = new Date();
+                                fifteenDaysAgo.setDate(today.getDate() - 15);
+                                setStartDate(fifteenDaysAgo.toISOString().split('T')[0]);
+                                setEndDate(today.toISOString().split('T')[0]);
+                            }}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                        >
+                            15 Días
+                        </button>
+                        <button
+                            onClick={() => {
+                                const today = new Date();
+                                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                                setStartDate(firstDayOfMonth.toISOString().split('T')[0]);
+                                setEndDate(today.toISOString().split('T')[0]);
+                            }}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                        >
+                            Este Mes
+                        </button>
+                        <button
+                            onClick={() => {
+                                setStartDate('');
+                                setEndDate('');
+                            }}
+                            className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                            Todas las Fechas
+                        </button>
+                    </div>
+                </div>
+
+                {/* Custom Date Range */}
+                <div className="border-t border-gray-200 pt-3 sm:pt-4">
+                    <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Rango Personalizado</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                        <div>
+                            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Fecha Inicio</label>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full px-3 py-2 sm:px-4 sm:py-2.5 text-sm border-2 border-gray-200 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 sm:focus:ring-4 focus:ring-blue-100 transition-all"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Fecha Fin</label>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="w-full px-3 py-2 sm:px-4 sm:py-2.5 text-sm border-2 border-gray-200 rounded-lg sm:rounded-xl focus:border-blue-500 focus:ring-2 sm:focus:ring-4 focus:ring-blue-100 transition-all"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Transactions List */}
+            <Card>
+                {loading ? (
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mx-auto" />
+                    </div>
+                ) : filteredTransactions.length === 0 ? (
+                    <div className="text-center py-12">
+                        <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="text-gray-500 mb-4">No hay transacciones</p>
+                        <Link href="/dashboard/transactions/new">
+                            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Crear primera transacción</button>
+                        </Link>
+                    </div>
+                ) : (
+                    <>
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-gray-50 border-b-2 border-gray-200">
+                                    <tr>
+                                        <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">ID</th>
+                                        <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Destinatario</th>
+                                        <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Banco</th>
+                                        <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Monto COP</th>
+                                        <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Monto Bs</th>
+                                        <th className="px-4 lg:px-6 py-3 text-center text-xs md:text-sm font-medium text-gray-500 uppercase">Tasa</th>
+                                        <th className="px-4 lg:px-6 py-3 text-center text-xs md:text-sm font-medium text-gray-500 uppercase">Estado</th>
+                                        <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Fecha</th>
+                                        <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {currentTransactions.map((transaction) => (
+                                        <tr key={transaction.id} className="hover:bg-gray-50">
+                                            <td className="px-4 lg:px-6 py-4 text-gray-900 font-medium text-sm">#{transaction.id}</td>
+                                            <td className="px-4 lg:px-6 py-4">
+                                                <div className="font-medium text-gray-900 text-sm">{transaction.beneficiaryFullName}</div>
+                                                <div className="text-xs text-gray-500">{transaction.beneficiaryAccountNumber}</div>
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{transaction.beneficiaryBankName}</td>
+                                            <td className="px-4 lg:px-6 py-4 text-right font-semibold text-gray-900 text-sm">
+                                                {parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4 text-right font-semibold text-gray-900 text-sm">
+                                                {parseFloat(transaction.amountBs.toString()).toFixed(2)}
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4 text-center text-gray-600 text-sm">
+                                                {transaction.saleRate != null
+                                                    ? parseFloat(transaction.saleRate.toString()).toFixed(2)
+                                                    : '-'}
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4 text-center">
+                                                <Badge status={transaction.status} />
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4 text-gray-600 text-xs md:text-sm">
+                                                {new Date(transaction.createdAt).toLocaleString('es-CO')}
+                                            </td>
+                                            <td className="px-4 lg:px-6 py-4">
+                                                <div className="flex gap-2 justify-end items-center">
+                                                    <button
+                                                        onClick={() => handleViewDetails(transaction)}
+                                                        className="p-2 bg-purple-100 hover:bg-purple-200 text-purple-700 hover:text-purple-900 rounded-lg transition-colors"
+                                                        aria-label="Ver detalles"
+                                                        title="Ver detalles"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                    </button>
+                                                    {canEdit(transaction) && !isAdminColombia && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleEdit(transaction)}
+                                                                className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 hover:text-blue-900 rounded-lg transition-colors"
+                                                                aria-label="Editar"
+                                                                title="Editar"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleCancel(transaction)}
+                                                                className="p-2 bg-red-100 hover:bg-red-200 text-red-700 hover:text-red-900 rounded-lg transition-colors"
+                                                                aria-label="Eliminar"
+                                                                title="Eliminar"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {transaction.status === 'rechazado' && !isAdminColombia && (
+                                                        <button
+                                                            onClick={() => handleResend(transaction)}
+                                                            className="p-2 bg-green-100 hover:bg-green-200 text-green-700 hover:text-green-900 rounded-lg transition-colors"
+                                                            aria-label="Reenviar"
+                                                            title="Reenviar"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Mobile list view */}
+                        <div className="md:hidden space-y-3">
+                            {currentTransactions.map((transaction) => (
+                                <div key={transaction.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-sm text-gray-500">#{transaction.id} · {new Date(transaction.createdAt).toLocaleDateString('es-CO')}</div>
+                                            <div className="font-medium text-gray-900 truncate">{transaction.beneficiaryFullName}</div>
+                                            <div className="text-sm text-gray-600 truncate">{transaction.beneficiaryBankName}</div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0">
+                                            <div className="text-lg font-bold text-gray-900">{parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</div>
+                                            <div className="text-sm text-gray-500">{parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex items-center justify-between">
+                                        <div><Badge status={transaction.status} /></div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleViewDetails(transaction)}
+                                                className="p-2 bg-purple-100 hover:bg-purple-200 text-purple-700 hover:text-purple-900 rounded-lg transition-colors"
+                                                aria-label="Ver detalles"
+                                                title="Ver detalles"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </button>
+                                            {canEdit(transaction) && !isAdminColombia && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleEdit(transaction)}
+                                                        className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 hover:text-blue-900 rounded-lg transition-colors"
+                                                        aria-label="Editar"
+                                                        title="Editar"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleCancel(transaction)}
+                                                        className="p-2 bg-red-100 hover:bg-red-200 text-red-700 hover:text-red-900 rounded-lg transition-colors"
+                                                        aria-label="Eliminar"
+                                                        title="Eliminar"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                </>
+                                            )}
+                                            {transaction.status === 'rechazado' && !isAdminColombia && (
+                                                <button
+                                                    onClick={() => handleResend(transaction)}
+                                                    className="p-2 bg-green-100 hover:bg-green-200 text-green-700 hover:text-green-900 rounded-lg transition-colors"
+                                                    aria-label="Reenviar"
+                                                    title="Reenviar"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+                                <div className="text-sm text-gray-600">
+                                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTransactions.length)} de {filteredTransactions.length} transacciones
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                        disabled={currentPage === 1}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        Anterior
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page)}
+                                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                            >
+                                                {page}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        Siguiente
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </Card>
+
+            {/* Alert Dialog */}
+            <Alert
+                isOpen={alertState.isOpen}
+                message={alertState.message}
+                variant={alertState.variant}
+                onClose={() => setAlertState({ ...alertState, isOpen: false })}
+            />
+
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={confirmState.isOpen}
+                title="Confirmar cancelación"
+                message={confirmState.message}
+                confirmText="Sí, cancelar"
+                cancelText="No, mantener"
+                variant="danger"
+                onConfirm={confirmState.onConfirm}
+                onCancel={() => setConfirmState({ isOpen: false, message: '', onConfirm: () => { } })}
+            />
+
+            {/* Transaction Detail Modal */}
+            <Modal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                title="Detalles de la Transacción"
+                size="lg"
+            >
+                {selectedTransaction && (
+                    <div className="space-y-6">
+                        {/* Header Info */}
+                        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                            <div>
+                                <p className="text-sm text-gray-500">ID de Transacción</p>
+                                <p className="text-2xl font-bold text-gray-900">#{selectedTransaction.id}</p>
+                            </div>
+                            <Badge status={selectedTransaction.status} />
+                        </div>
+
+                        {/* Amounts Section */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                                <p className="text-xs text-green-600 font-medium mb-1">Monto en COP</p>
+                                <p className="text-2xl font-bold text-green-900">
+                                    ${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
+                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                <p className="text-xs text-blue-600 font-medium mb-1">Monto en Bs</p>
+                                <p className="text-2xl font-bold text-blue-900">
+                                    {parseFloat(selectedTransaction.amountBs.toString()).toFixed(2)} Bs
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Rate Info */}
+                        <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                            <p className="text-xs text-purple-600 font-medium mb-1">Tasa Aplicada</p>
+                            <p className="text-xl font-bold text-purple-900">
+                                {selectedTransaction.saleRate != null
+                                    ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2)
+                                    : '-'}{' '}
+                                Bs/COP
+                            </p>
+                        </div>
+
+                        {/* Beneficiary Info */}
+                        <div className="space-y-3">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+
+                                Destinatario
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl">
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1">Nombre</p>
+                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1">Banco</p>
+                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1">Cuenta</p>
+                                    <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1">Tipo de Cuenta</p>
+                                    <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Client Info */}
+                        {(selectedTransaction.clientPresencial || selectedTransaction.clientApp) && (
+                            <div className="space-y-3">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+
+                                    Cliente
+                                </h3>
+                                <div className="p-4 bg-gray-50 rounded-xl">
+                                    <p className="font-medium text-gray-900">
+                                        {selectedTransaction.clientPresencial?.name || selectedTransaction.clientApp?.name}
+                                    </p>
+                                    {selectedTransaction.clientPresencial?.phone && (
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            {selectedTransaction.clientPresencial.phone}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Rejection Reason */}
+                        {selectedTransaction.rejectionReason && (
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-red-700">Motivo del Rechazo</h3>
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <p className="text-sm text-red-800 font-medium">{selectedTransaction.rejectionReason}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Notes */}
+                        {selectedTransaction.notes && (
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-gray-700">Notas Originales</h3>
+                                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-sm text-gray-700">{selectedTransaction.notes}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Timestamps */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-200">
+                            <div>
+                                <p className="text-xs text-gray-500 mb-1">Fecha de Creación</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                    {new Date(selectedTransaction.createdAt).toLocaleString('es-CO', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </p>
+                            </div>
+                            {selectedTransaction.lastEditedAt && (
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-1">Última Edición</p>
+                                    <p className="text-sm font-medium text-gray-900">
+                                        {new Date(selectedTransaction.lastEditedAt).toLocaleString('es-CO', {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Resend Rejected Transaction Modal */}
+            <Modal
+                isOpen={isResendModalOpen}
+                onClose={() => setIsResendModalOpen(false)}
+                title="Reenviar Transacción Rechazada"
+                size="lg"
+            >
+                {selectedTransaction && (
+                    <div className="space-y-4">
+                        {/* Rejection Info - Highlighted */}
+                        <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl">
+                            <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-0.5">
+                                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="text-base font-bold text-red-900 mb-2">Motivo del Rechazo</h4>
+                                    {selectedTransaction.rejectionReason ? (
+                                        <p className="text-sm text-red-800 font-medium">{selectedTransaction.rejectionReason}</p>
+                                    ) : (
+                                        <p className="text-sm text-red-600 italic">No se especificó un motivo</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Rejection Image if exists */}
+                        {selectedTransaction.comprobanteVenezuela && (
+                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                                <h4 className="text-sm font-semibold text-yellow-900 mb-2 flex items-center gap-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Imagen Adjunta por el Administrador
+                                </h4>
+                                <div className="mt-3">
+                                    <img
+                                        src={selectedTransaction.comprobanteVenezuela}
+                                        alt="Imagen del error"
+                                        className="max-w-full h-auto rounded-lg border-2 border-yellow-300 shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+                                        onClick={() => window.open(selectedTransaction.comprobanteVenezuela, '_blank')}
+                                    />
+                                    <p className="text-xs text-yellow-700 mt-2 italic">Haz clic en la imagen para verla en tamaño completo</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Transaction Info */}
+                        <div className="p-4 bg-gray-50 rounded-xl">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-2">Datos de la Transacción</h4>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <p className="text-gray-500">ID:</p>
+                                    <p className="font-medium">#{selectedTransaction.id}</p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500">Monto:</p>
+                                    <p className="font-medium">${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO')}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Beneficiary Info - Editable */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-900">Datos del Destinatario</h4>
+                            <p className="text-xs text-gray-600">Revisa y corrige los datos del destinatario si es necesario</p>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Nombre Completo</label>
+                                    <input
+                                        type="text"
+                                        defaultValue={selectedTransaction.beneficiaryFullName}
+                                        onChange={(e) => setBeneficiaryChanges({ ...beneficiaryChanges, beneficiaryFullName: e.target.value })}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Documento</label>
+                                    <input
+                                        type="text"
+                                        defaultValue={selectedTransaction.beneficiaryDocumentId}
+                                        onChange={(e) => setBeneficiaryChanges({ ...beneficiaryChanges, beneficiaryDocumentId: e.target.value })}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Banco</label>
+                                    <input
+                                        type="text"
+                                        defaultValue={selectedTransaction.beneficiaryBankName}
+                                        onChange={(e) => setBeneficiaryChanges({ ...beneficiaryChanges, beneficiaryBankName: e.target.value })}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Número de Cuenta</label>
+                                    <input
+                                        type="text"
+                                        defaultValue={selectedTransaction.beneficiaryAccountNumber}
+                                        onChange={(e) => setBeneficiaryChanges({ ...beneficiaryChanges, beneficiaryAccountNumber: e.target.value })}
+                                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Warning about beneficiary changes */}
+                        {showBeneficiaryChangeWarning && (
+                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                                <h4 className="text-sm font-semibold text-yellow-900 mb-2">Se detectaron cambios en el destinatario</h4>
+                                <p className="text-sm text-yellow-800 mb-3">
+                                    ¿Deseas guardar estos cambios en el destinatario?
+                                </p>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => handleResendConfirm(true)}
+                                        className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium"
+                                    >
+                                        Sí, guardar cambios
+                                    </button>
+                                    <button
+                                        onClick={() => handleResendConfirm(false)}
+                                        className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm font-medium"
+                                    >
+                                        No, solo reenviar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Actions */}
+                        {!showBeneficiaryChangeWarning && (
+                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={() => setIsResendModalOpen(false)}
+                                    className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleResendSubmit}
+                                    className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                                >
+                                    Reenviar Transacción
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </Modal>
+        </div >
+    );
+}

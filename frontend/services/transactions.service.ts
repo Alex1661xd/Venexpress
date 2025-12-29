@@ -1,0 +1,190 @@
+import api from './api';
+import { Transaction, CreateTransactionDto, TransactionHistory, SetPurchaseRateDto, PendingPurchaseRateQuery } from '@/types/transaction';
+
+export const transactionsService = {
+    async getTransactions(limit: number = 10, offset: number = 0): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions', {
+            params: { limit, offset },
+        });
+        return response.data;
+    },
+
+    async getTransaction(id: number): Promise<Transaction> {
+        const response = await api.get<Transaction>(`/transactions/${id}`);
+        return response.data;
+    },
+
+    async createTransaction(data: CreateTransactionDto): Promise<Transaction> {
+        const response = await api.post<Transaction>('/transactions', data);
+        return response.data;
+    },
+
+    async getTransactionHistory(id: number): Promise<TransactionHistory[]> {
+        const response = await api.get<TransactionHistory[]>(`/transactions/${id}/history`);
+        return response.data;
+    },
+
+    async updateTransaction(id: number, data: any): Promise<Transaction> {
+        const response = await api.patch<Transaction>(`/transactions/${id}`, data);
+        return response.data;
+    },
+
+    async enterEditMode(id: number): Promise<Transaction> {
+        const response = await api.post<Transaction>(`/transactions/${id}/enter-edit`);
+        return response.data;
+    },
+
+    async cancelTransaction(id: number): Promise<Transaction> {
+        const response = await api.post<Transaction>(`/transactions/${id}/cancel`);
+        return response.data;
+    },
+
+    async getDebt(period?: string, startDate?: string, endDate?: string): Promise<{ totalDebt: number; paidAmount: number; transactions: Transaction[] }> {
+        const response = await api.get('/transactions/debt', {
+            params: { period, startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async markAsPaid(transactionIds: number[]): Promise<void> {
+        await api.post('/transactions/mark-as-paid', { transactionIds });
+    },
+
+    async markDateRangeAsPaid(startDate: string, endDate: string): Promise<{ affected: number }> {
+        const response = await api.post<{ affected: number }>('/transactions/mark-date-range-as-paid', {
+            startDate,
+            endDate,
+        });
+        return response.data;
+    },
+
+    // Admin Venezuela methods
+    async getPendingVenezuela(): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/pending-venezuela');
+        return response.data;
+    },
+
+    async completeTransfer(id: number, voucher?: File): Promise<Transaction> {
+        const formData = new FormData();
+        if (voucher) {
+            formData.append('voucher', voucher);
+        }
+        const response = await api.post<Transaction>(`/transactions/${id}/complete`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
+    async rejectTransfer(id: number, reason: string, voucher?: File): Promise<Transaction> {
+        const formData = new FormData();
+        formData.append('reason', reason);
+        if (voucher) {
+            formData.append('voucher', voucher);
+        }
+        const response = await api.post<Transaction>(`/transactions/${id}/reject`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
+    async cancelByAdmin(id: number, reason: string): Promise<Transaction> {
+        const response = await api.post<Transaction>(`/transactions/${id}/cancel-admin`, { reason });
+        return response.data;
+    },
+
+    async getTransferHistory(status?: string, startDate?: string, endDate?: string): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/history-admin', {
+            params: { status, startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async getReports(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/reports', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async resendRejectedTransaction(id: number, updateData: any): Promise<Transaction> {
+        const response = await api.post<Transaction>(`/transactions/${id}/resend`, updateData);
+        return response.data;
+    },
+
+    async getVendorReports(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/vendor-reports', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async getVendorHistory(params: any): Promise<any> {
+        const response = await api.get('/transactions/vendor-history', { params });
+        return response.data;
+    },
+
+    // --- Tasa de compra (Admin Venezuela) ---
+
+    async getPendingPurchaseRateTransactions(query: PendingPurchaseRateQuery): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/pending-purchase-rate', { params: query });
+        return response.data;
+    },
+
+    async setPurchaseRate(id: number, dto: SetPurchaseRateDto): Promise<Transaction> {
+        const response = await api.patch<Transaction>(`/transactions/${id}/purchase-rate`, dto);
+        return response.data;
+    },
+
+    async bulkSetPurchaseRate(dto: SetPurchaseRateDto): Promise<{ message: string; affected: number }> {
+        const response = await api.post<{ message: string; affected: number }>('/transactions/bulk/purchase-rate', dto);
+        return response.data;
+    },
+
+    // Admin Colombia methods
+    async getPendingAdminColombia(): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/admin-colombia/pending');
+        return response.data;
+    },
+
+    async getHistoryAdminColombia(status?: string, startDate?: string, endDate?: string, vendorId?: number): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/admin-colombia/history', {
+            params: { status, startDate, endDate, vendorId },
+        });
+        return response.data;
+    },
+
+    async getReportsAdminColombia(startDate?: string, endDate?: string, vendorId?: number): Promise<any> {
+        const response = await api.get('/transactions/admin-colombia/reports', {
+            params: { startDate, endDate, vendorId },
+        });
+        return response.data;
+    },
+
+    async getReportsCSV(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/reports/csv', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async getReportsAdminColombiaCSV(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/admin-colombia/reports/csv', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async getAdminColombiaFinancialSummary(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/admin-colombia/financial-summary', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    async markVendorCommissionAsPaid(transactionIds: number[]): Promise<{ affected: number }> {
+        const response = await api.post<{ affected: number }>('/transactions/admin-colombia/commission/mark-paid', {
+            transactionIds,
+        });
+        return response.data;
+    },
+};

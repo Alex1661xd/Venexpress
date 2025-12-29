@@ -1,0 +1,106 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+import { Client } from '../../clients/entities/client.entity';
+import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
+import { TransactionStatus } from '../../../common/enums/transaction-status.enum';
+
+@Entity('transactions')
+export class Transaction {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => User)
+  createdBy: User; // vendedor o usuario app
+
+  @ManyToOne(() => Client, { nullable: true })
+  clientPresencial: Client;
+
+  @ManyToOne(() => User, { nullable: true })
+  clientApp: User;
+
+  @ManyToOne(() => Beneficiary, { nullable: true })
+  beneficiary: Beneficiary;
+
+  // Snapshot de datos del Destinatario (inmutables)
+  @Column({ nullable: true })
+  beneficiaryFullName: string;
+
+  @Column({ nullable: true })
+  beneficiaryDocumentId: string;
+
+  @Column({ nullable: true })
+  beneficiaryBankName: string;
+
+  @Column({ nullable: true })
+  beneficiaryAccountNumber: string;
+
+  @Column({ nullable: true })
+  beneficiaryAccountType: string;
+
+  @Column({ nullable: true })
+  beneficiaryPhone: string;
+
+  @Column('decimal', { precision: 12, scale: 2 })
+  amountCOP: number;
+
+  @Column('decimal', { precision: 12, scale: 4 })
+  amountBs: number;
+
+  @Column('decimal', { precision: 10, scale: 4, name: 'sale_rate' })
+  saleRate: number; // Tasa de venta usada
+
+  @Column('decimal', { precision: 10, scale: 4, name: 'purchase_rate', nullable: true })
+  purchaseRate: number; // Tasa de compra (se establece después)
+
+  @Column({ name: 'is_purchase_rate_set', default: false })
+  isPurchaseRateSet: boolean; // Indica si ya se estableció la tasa de compra
+
+  @Column({
+    type: 'enum',
+    enum: TransactionStatus,
+    default: TransactionStatus.PENDIENTE,
+  })
+  status: TransactionStatus;
+
+  @Column({ nullable: true })
+  comprobanteCliente: string; // URL del comprobante del cliente
+
+  @Column({ nullable: true })
+  comprobanteVenezuela: string; // URL del comprobante de Venezuela
+
+  @Column('text', { nullable: true })
+  notes: string;
+
+  @Column('text', { nullable: true })
+  rejectionReason: string; // Motivo del rechazo (separado de notes)
+
+  @Column({ type: 'boolean', default: false })
+  isPaidByVendor: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  paidByVendorAt: Date;
+
+  // Comisión (2% de la transferencia) pagada por Admin Colombia al vendedor
+  @Column({ type: 'boolean', default: false })
+  isCommissionPaidToVendor: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  commissionPaidAt: Date;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastEditedAt: Date;
+}
+

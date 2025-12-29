@@ -1,0 +1,112 @@
+export type TransactionStatus =
+    | 'pendiente'
+    | 'pendiente_colombia'
+    | 'pendiente_venezuela'
+    | 'procesando'
+    | 'enviado_venezuela'
+    | 'completado'
+    | 'rechazado'
+    | 'cancelado_vendedor'
+    | 'cancelado_administrador';
+
+export interface Transaction {
+    id: number;
+    createdBy: {
+        id: number;
+        name: string;
+        role: string;
+    };
+    clientPresencial?: {
+        id: number;
+        name: string;
+        phone: string;
+    };
+    clientApp?: {
+        id: number;
+        name: string;
+        email: string;
+    };
+
+    // Referencia al Destinatario (puede ser null si fue eliminado)
+    beneficiary?: {
+        id: number;
+    };
+
+    // Snapshot de datos del Destinatario (siempre disponibles)
+    beneficiaryFullName: string;
+    beneficiaryDocumentId: string;
+    beneficiaryBankName: string;
+    beneficiaryAccountNumber: string;
+    beneficiaryAccountType: string;
+    beneficiaryPhone?: string;
+
+    amountCOP: number;
+    amountBs: number;
+    // Tasa de venta usada (campo nuevo en backend). Mantengo rateUsed para compatibilidad visual.
+    saleRate?: number;
+    // Tasa de compra (se establece después por Admin Venezuela)
+    purchaseRate?: number | null;
+    isPurchaseRateSet?: boolean;
+    rateUsed?: number;
+    status: TransactionStatus;
+    comprobanteCliente?: string;
+    comprobanteVenezuela?: string;
+    notes?: string;
+    rejectionReason?: string; // Motivo del rechazo (separado de notes)
+    isPaidByVendor?: boolean;
+    paidByVendorAt?: string;
+    isCommissionPaidToVendor?: boolean;
+    commissionPaidAt?: string;
+    createdAt: string;
+    updatedAt: string;
+    lastEditedAt?: string;
+}
+
+export interface CreateTransactionDto {
+    beneficiaryId: number;
+    amountCOP?: number;
+    amountBs?: number;
+    clientPresencialId?: number;
+    comprobanteCliente?: string;
+    notes?: string;
+}
+
+export interface TransactionHistory {
+    id: number;
+    transaction: {
+        id: number;
+    };
+    status: TransactionStatus;
+    note?: string;
+    changedBy?: {
+        id: number;
+        name: string;
+        role: string;
+    };
+    changedAt: string;
+}
+
+export interface UpdateTransactionStatusDto {
+    status: TransactionStatus;
+    comprobanteVenezuela?: string;
+    notes?: string;
+}
+
+export interface DebtResponse {
+    totalDebt: number;
+    transactions: Transaction[];
+}
+
+// DTO para establecer la tasa de compra (coincide con SetPurchaseRateDto del backend)
+export interface SetPurchaseRateDto {
+    purchaseRate: number;
+    isFinal?: boolean;
+    transactionIds?: number[];
+    date?: string; // YYYY-MM-DD
+}
+
+export interface PendingPurchaseRateQuery {
+    startDate?: string; // YYYY-MM-DD
+    endDate?: string;   // YYYY-MM-DD
+    vendorId?: number;
+}

@@ -1,0 +1,444 @@
+1. Descripción detallada de la aplicación
+
+La aplicación digitaliza y automatiza un proceso que actualmente se realiza de forma manual entre vendedores, el administrador en Colombia (tu papá) y un administrador en Venezuela.
+
+👥 Roles principales
+
+Administrador Colombia
+
+Revisa los giros enviados por vendedores y usuarios.
+
+Envía los giros aprobados a Venezuela.
+
+Recibe resultados desde Venezuela (completado, error, comprobante).
+
+Devuelve el estado final a vendedores o clientes.
+
+Administrador Venezuela
+
+Actualiza la tasa de cambio (varias veces al día).
+
+Procesa los giros enviados desde Colombia.
+
+Devuelve estado + comprobante o error.
+
+Vendedores (puntos físicos)
+
+Atienden clientes presenciales.
+
+Registran clientes y destinatarios frecuentes.
+
+Crean giros.
+
+Reciben resultados del administrador.
+
+Usuarios finales de la app (no presenciales)
+
+Crean cuenta.
+
+Guardan sus datos y sus destinatarios.
+
+Registran giros subiendo comprobante del pago.
+
+Reciben notificaciones del estado del giro.
+
+
+2. Flujo general del sistema
+
+El administrador Venezuela actualiza la tasa de cambio, que queda vigente en toda la app.
+
+Un vendedor o usuario crea un giro, indicando:
+
+Cliente remitente
+
+Destinatario
+
+Monto en COP o en Bs
+
+Sistema calcula automáticamente el valor correspondiente según la tasa.
+
+El giro llega al administrador Colombia, quien:
+
+Revisa datos
+
+Revisa comprobante (si es usuario de la app)
+
+Aprueba / rechaza
+
+Si aprueba:
+
+Envía el giro a Venezuela
+
+El administrador Venezuela:
+
+Realiza transferencia bancaria al destinatario
+
+Devuelve estado + comprobante
+
+El administrador Colombia reenvía el estado final al vendedor o usuario.
+
+. Modelo de datos – PostgreSQL (TypeORM)
+
+A continuación las entidades diseñadas para usarse con TypeORM en NestJS.
+
+📌 Usuario
+
+Representa tanto a vendedores como a usuarios normales y administradores.
+
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column({ unique: true })
+  phone: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @Column()
+  password: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['admin_colombia', 'admin_venezuela', 'vendedor', 'cliente'],
+  })
+  role: string;
+
+  @Column({ nullable: true })
+  pointId: number; // solo si es vendedor
+
+  @ManyToOne(() => Point, point => point.vendedores)
+  point: Point;
+}
+
+📌 Punto físico (Point)
+
+Ubicación donde trabajan los vendedores.
+
+@Entity('points')
+export class Point {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column()
+  address: string;
+
+  @OneToMany(() => User, user => user.point)
+  vendedores: User[];
+}
+
+📌 Cliente
+
+Clientes que van presencialmente a los puntos físicos.
+
+@Entity('clients')
+export class Client {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column()
+  phone: string;
+
+  @ManyToOne(() => User)
+  vendedor: User; // quién atendió y registró al cliente
+}
+
+📌 Destinatario
+
+A quién llega el dinero en Venezuela.
+
+@Entity('destinatarios')
+export class Destinatario {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  fullName: string;
+
+  @Column()
+  documentId: string;
+
+  @Column()
+  bankName: string;
+
+  @Column()
+  accountNumber: string;
+
+  @Column()
+  accountType: string;
+
+  @ManyToOne(() => Client)
+  clientColombia: Client;
+
+  @ManyToOne(() => User)
+  userApp: User; // para usuarios que usan la app directamente
+}
+
+📌 Tasa de cambio (ExchangeRate)
+@Entity('exchange_rates')
+export class ExchangeRate {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column('numeric', { precision: 10, scale: 2 })
+  rate: number;
+
+  @Column({ type: 'timestamp' })
+  createdAt: Date;
+}
+
+📌 Giro
+
+El objeto principal del sistema.
+
+@Entity('giros')
+export class Giro {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => User)
+  createdBy: User; // vendedor o usuario app
+
+  @ManyToOne(() => Client, { nullable: true })
+  clientPresencial: Client;
+
+  @ManyToOne(() => User, { nullable: true })
+  clientApp: User;
+
+  @ManyToOne(() => Destinatario)
+  destinatario: Destinatario;
+
+  @Column('numeric', { precision: 12, scale: 2 })
+  amountCOP: number;
+
+  @Column('numeric', { precision: 12, scale: 2 })
+  amountBs: number;
+
+  @Column('numeric', { precision: 10, scale: 2 })
+  rateUsed: number;
+
+  @Column({
+    type: 'enum',
+    enum: ['pendiente', 'enviado_venezuela', 'procesando', 'completado', 'rechazado'],
+    default: 'pendiente',
+  })
+  status: string;
+
+  @Column({ nullable: true })
+  comprobanteCliente: string; // URL
+
+  @Column({ nullable: true })
+  comprobanteVenezuela: string; // URL
+
+  @Column({ type: 'timestamp', default: () => 'NOW()' })
+  createdAt: Date;
+}
+
+📌 Historial de estados del giro
+@Entity('giro_status_history')
+export class GiroStatusHistory {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => Giro)
+  giro: Giro;
+
+  @Column()
+  status: string;
+
+  @Column('text', { nullable: true })
+  note: string;
+
+  @Column({ type: 'timestamp', default: () => 'NOW()' })
+  changedAt: Date;
+}
+
+🧩 4. Tecnologías a usar
+Backend – NestJS + TypeScript
+
+NestJS
+
+TypeORM
+
+PostgreSQL
+
+JWT para autenticación
+
+Multer o S3 para comprobantes (según hosting)
+
+Zod o class-validator para validaciones
+
+Frontend – Next.js 14 (App Router)
+
+Next.js + React
+
+TailwindCSS
+
+Axios / React Query
+
+Diseño responsive (principal foco: móviles)
+
+Server Actions cuando aplique
+
+1. Cálculo de montos (COP ↔︎ Bs) — reglas y ejemplo
+Principio
+
+La aplicación congela la tasa usada en el momento de crear el giro. Es decir, al crear una Giro se guarda la rateUsed (la tasa actual) para que los valores sean reproducibles aunque luego cambie la tasa global.
+
+rate se entiende como: 1 VES = rate COP
+(ej. rate = 213 significa 1 bolívar ≈ 213 pesos)
+
+Fórmulas
+
+Si el usuario ingresa COP y queremos saber Bs:
+
+amountBs = amountCop / rate
+
+
+Si el usuario ingresa Bs y queremos saber COP:
+
+amountCop = amountBs * rate
+
+Ejemplo numérico
+
+rate = 213
+
+Si dan 160000 COP → 160000 / 213 = 751.17 Bs
+
+Si quieren que lleguen 751.17 Bs → 751.17 * 213 = 160000 COP
+
+Reglas de negocio adicionales (sugeridas)
+
+Redondeo: almacenar amountBs con 4 decimales y amountCop con 2 decimales.
+
+Mostrar al cliente un resumen con rateUsed, amountCOP, amountBs y timestamp.
+
+Siempre grabar en la transacción: rateUsed, amountCOP, amountBs, rateId (si usas rates históricos).
+
+3. Estructura del Backend (NestJS + TypeORM + TypeScript)
+
+Objetivo: modular, testeable y con capas claras.
+
+/backend
+├─ src
+│  ├─ main.ts
+│  ├─ app.module.ts
+│  ├─ config/
+│  │   ├─ database.config.ts
+│  │   └─ aws.config.ts
+│  ├─ common/
+│  │   ├─ dto/
+│  │   ├─ filters/
+│  │   ├─ interceptors/
+│  │   └─ guards/
+│  ├─ modules/
+│  │   ├─ auth/
+│  │   │   ├─ auth.module.ts
+│  │   │   ├─ auth.controller.ts
+│  │   │   ├─ auth.service.ts
+│  │   │   └─ jwt.strategy.ts
+│  │   ├─ users/
+│  │   │   ├─ users.module.ts
+│  │   │   ├─ users.controller.ts
+│  │   │   ├─ users.service.ts
+│  │   │   └─ entities/user.entity.ts
+│  │   ├─ points/
+│  │   ├─ vendors/
+│  │   ├─ clients/
+│  │   ├─ beneficiaries/
+│  │   ├─ transactions/
+│  │   │   ├─ transactions.module.ts
+│  │   │   ├─ transactions.controller.ts
+│  │   │   ├─ transactions.service.ts
+│  │   │   ├─ dto/
+│  │   │   └─ entities/giro.entity.ts
+│  │   ├─ rates/
+│  │   ├─ proofs/          -- subida y metadatos de comprobantes
+│  │   └─ notifications/   -- encolado y log (sin integrar WA por ahora)
+│  ├─ shared/
+│  │   ├─ typeorm/         -- migraciones, factories, seeding
+│  │   └─ services/        -- s3Service, fileService
+│  └─ jobs/
+│      ├─ queue.processor.ts -- workers para tareas largas
+│      └─ cron.tasks.ts      -- jobs periódicos si aplica
+├─ ormconfig.ts
+├─ tsconfig.json
+└─ package.json
+Principios y responsabilidades
+
+Controllers: recibir solicitudes HTTP, validaciones iniciales con DTOs (class-validator).
+
+Services: lógica de negocio (crear transacción, validar comprobante, cálculo, llamadas a storage).
+
+Repositories / TypeORM Entities: acceso a DB, consultas complejas dentro de repositorios.
+
+Guards: autorización por roles (vendedor vs admin).
+
+Interceptors / Filters: logging, manejo de errores, transformación de respuestas.
+
+Jobs / Queue: para procesamiento pesado (p.ej. OCR de comprobantes, envío masivo de notificaciones); usar Bull o RabbitMQ si escalas.
+
+Config: centralizar variables (DB, S3, JWT) con @nestjs/config.
+Infraestructura
+
+4. Estructura del Frontend (Next.js — responsive, móvil-first)
+
+Usaremos Next.js (App Router) + TypeScript + TailwindCSS. Separar responsabilidades y favorecer componentes reutilizables.
+
+/frontend
+├─ app/                         -- App Router
+│  ├─ layout.tsx
+│  ├─ page.tsx                  -- homepage / login
+│  ├─ dashboard/
+│  │   ├─ layout.tsx
+│  │   ├─ page.tsx
+│  │   ├─ vendors/
+│  │   └─ transactions/
+│  └─ api/                      -- server actions si aplica (para SSR)
+├─ components/
+│  ├─ forms/
+│  ├─ ui/                       -- Button, Input, Card
+│  └─ transaction/              -- TransactionForm, TransactionCard
+├─ hooks/
+│  ├─ useAuth.ts
+│  └─ useTransactions.ts
+├─ services/
+│  ├─ api.ts                    -- axios instance
+│  └─ transactions.api.ts       -- llamadas a endpoints
+├─ stores/                      -- Zustand / RTK slices (ver recomendación abajo)
+│  └─ uiStore.ts
+├─ styles/
+│  └─ globals.css               -- Tailwind
+├─ types/
+│  └─ dto.ts
+└─ package.json
+
+UX y diseño
+
+Móvil-first: usar breakpoints y componentes adaptativos.
+
+Forms: validación cliente con Zod o React Hook Form + Zod.
+
+Fetch de datos: TanStack Query (React Query) para cache, revalidación y estados (loading, error).
+
+Upload de comprobantes: componente para previsualizar y subir (presigned URLs si S3).
+
+Autenticación: mantener token JWT en HttpOnly cookie o secure storage (móvil).
+
+Búsquedas rápidas: búsqueda por nombre/telefono en clientes frecuentes y destinatarios con autocompletar.
+
+PostgreSQL (Railway / Supabase / Render)
+
+Deploy del backend en Railway o Render
+
+Deploy del frontend en Vercel
