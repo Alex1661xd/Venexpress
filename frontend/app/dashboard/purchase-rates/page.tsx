@@ -151,7 +151,7 @@ export default function PurchaseRatesPage() {
   if (user?.role !== "admin_venezuela") {
     return (
       <div className="p-4">
-        <Alert isOpen={true} message="No tienes permiso para ver esta página." variant="error" />
+        <Alert isOpen={true} message="No tienes permiso para ver esta página." variant="error" onClose={() => { }} />
       </div>
     );
   }
@@ -283,7 +283,7 @@ export default function PurchaseRatesPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  
+
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Fecha
