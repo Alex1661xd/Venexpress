@@ -16,7 +16,7 @@ import { extname } from 'path';
 export class StorageService {
     private readonly logger = new Logger(StorageService.name);
     private readonly supabase: SupabaseClient;
-    private readonly bucketName = 'proofs';
+    private readonly bucketName = 'DataVenexpressStorage';
     private readonly signedUrlExpiration: number;
 
     constructor(private readonly configService: ConfigService) {

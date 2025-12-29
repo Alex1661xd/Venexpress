@@ -25,7 +25,7 @@ export function createSupabaseClient(): SupabaseClient {
 /**
  * Nombre del bucket de Storage para comprobantes
  */
-export const STORAGE_BUCKET = 'proofs';
+export const STORAGE_BUCKET = 'DataVenexpressStorage';
 
 /**
  * Tiempo de expiración por defecto para signed URLs (en segundos)
