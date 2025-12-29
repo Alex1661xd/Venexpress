@@ -1,33 +1,35 @@
 import {
   Controller,
   Post,
+  Get,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
   UseGuards,
+  Body,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ProofsService } from './proofs.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 
+/**
+ * Controlador para gestión de comprobantes
+ * Los archivos se reciben en memoria y se suben a Supabase Storage
+ */
 @Controller('proofs')
 @UseGuards(JwtAuthGuard)
 export class ProofsController {
-  constructor(private readonly proofsService: ProofsService) {}
+  constructor(private readonly proofsService: ProofsService) { }
 
+  /**
+   * Sube un comprobante genérico
+   */
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/proofs',
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = extname(file.originalname);
-          cb(null, `proof-${uniqueSuffix}${ext}`);
-        },
-      }),
+      storage: memoryStorage(),
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB
       },
@@ -39,12 +41,37 @@ export class ProofsController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('transactionId') transactionId?: string,
+    @Body('type') type?: 'cliente' | 'venezuela' | 'rejection',
+  ) {
     if (!file) {
       throw new BadRequestException('No se proporcionó ningún archivo');
     }
 
-    return this.proofsService.handleUpload(file);
+    return this.proofsService.handleUpload(
+      file,
+      transactionId ? parseInt(transactionId, 10) : undefined,
+      type || 'venezuela',
+    );
+  }
+
+  /**
+   * Obtiene una URL firmada para acceder a un comprobante
+   */
+  @Get('signed-url')
+  async getSignedUrl(
+    @Query('path') path: string,
+    @Query('expiresIn') expiresIn?: string,
+  ) {
+    if (!path) {
+      throw new BadRequestException('La ruta del archivo es requerida');
+    }
+
+    const expiration = expiresIn ? parseInt(expiresIn, 10) : undefined;
+    const signedUrl = await this.proofsService.getSignedUrl(path, expiration);
+
+    return { signedUrl };
   }
 }
-

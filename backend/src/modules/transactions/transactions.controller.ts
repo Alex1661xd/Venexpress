@@ -13,8 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -26,11 +25,15 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { SetPurchaseRateDto } from './dto/set-purchase-rate.dto';
+import { StorageService } from '../../common/services/storage.service';
 
 @Controller('transactions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) { }
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly storageService: StorageService,
+  ) { }
 
   @Post()
   create(
@@ -147,40 +150,62 @@ export class TransactionsController {
     return this.transactionsService.getReportsCSV(query);
   }
 
+  /**
+   * Completa una transferencia con comprobante opcional
+   * El archivo se sube a Supabase Storage
+   */
   @Post(':id/complete')
-  @Roles(UserRole.ADMIN_VENEZUELA)
-  completeTransfer(
-    @Param('id') id: string,
-    @Body('voucherUrl') voucherUrl: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.transactionsService.completeTransfer(+id, voucherUrl, user);
-  }
-
-  @Post(':id/reject')
   @Roles(UserRole.ADMIN_VENEZUELA)
   @UseInterceptors(
     FileInterceptor('voucher', {
-      storage: diskStorage({
-        destination: './uploads/rejections',
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = extname(file.originalname);
-          cb(null, `rejection-${uniqueSuffix}${ext}`);
-        },
-      }),
+      storage: memoryStorage(),
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB
       },
       fileFilter: (req, file, cb) => {
         if (file && !file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
-          return cb(new Error('Solo se permiten imágenes y PDFs'), false);
+          return cb(new BadRequestException('Solo se permiten imágenes y PDFs'), false);
         }
         cb(null, true);
       },
     }),
   )
-  rejectTransfer(
+  async completeTransfer(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    let voucherPath: string | null = null;
+
+    // Si hay archivo, subirlo a Supabase Storage
+    if (file) {
+      voucherPath = await this.storageService.uploadFile(file, id, 'venezuela');
+    }
+
+    return this.transactionsService.completeTransfer(+id, voucherPath, user);
+  }
+
+  /**
+   * Rechaza una transferencia con motivo y comprobante opcional
+   * El archivo se sube a Supabase Storage
+   */
+  @Post(':id/reject')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  @UseInterceptors(
+    FileInterceptor('voucher', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, cb) => {
+        if (file && !file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+          return cb(new BadRequestException('Solo se permiten imágenes y PDFs'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async rejectTransfer(
     @Param('id') id: string,
     @Body() body: any,
     @UploadedFile() file: Express.Multer.File,
@@ -190,9 +215,15 @@ export class TransactionsController {
     if (!reason) {
       throw new BadRequestException('El motivo del rechazo es requerido');
     }
-    // Si hay archivo, guardamos la ruta relativa
-    const voucherUrl = file ? `/uploads/rejections/${file.filename}` : null;
-    return this.transactionsService.rejectTransfer(+id, reason, voucherUrl, user);
+
+    let voucherPath: string | null = null;
+
+    // Si hay archivo, subirlo a Supabase Storage
+    if (file) {
+      voucherPath = await this.storageService.uploadFile(file, id, 'rejection');
+    }
+
+    return this.transactionsService.rejectTransfer(+id, reason, voucherPath, user);
   }
 
   @Post(':id/cancel-admin')
@@ -294,10 +325,43 @@ export class TransactionsController {
     return this.transactionsService.resendRejectedTransaction(+id, updateData, user);
   }
 
+  /**
+   * Obtiene URLs firmadas para los comprobantes de una transacción
+   */
+  @Get(':id/proofs')
+  async getTransactionProofs(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    // Primero obtener la transacción para verificar permisos
+    const transaction = await this.transactionsService.findOne(+id, user);
+
+    const result: { comprobanteCliente?: string; comprobanteVenezuela?: string } = {};
+
+    // Generar signed URLs para cada comprobante que exista
+    if (transaction.comprobanteCliente) {
+      // Si es una ruta de Supabase (no local legacy)
+      if (!transaction.comprobanteCliente.startsWith('/uploads/')) {
+        result.comprobanteCliente = await this.storageService.getSignedUrl(transaction.comprobanteCliente);
+      } else {
+        result.comprobanteCliente = transaction.comprobanteCliente;
+      }
+    }
+
+    if (transaction.comprobanteVenezuela) {
+      if (!transaction.comprobanteVenezuela.startsWith('/uploads/')) {
+        result.comprobanteVenezuela = await this.storageService.getSignedUrl(transaction.comprobanteVenezuela);
+      } else {
+        result.comprobanteVenezuela = transaction.comprobanteVenezuela;
+      }
+    }
+
+    return result;
+  }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN_COLOMBIA)
   remove(@Param('id') id: string) {
     return this.transactionsService.remove(+id);
   }
 }
-

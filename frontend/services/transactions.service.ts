@@ -187,4 +187,12 @@ export const transactionsService = {
         });
         return response.data;
     },
+
+    /**
+     * Obtiene URLs firmadas para los comprobantes de una transacción
+     */
+    async getTransactionProofs(id: number): Promise<{ comprobanteCliente?: string; comprobanteVenezuela?: string }> {
+        const response = await api.get<{ comprobanteCliente?: string; comprobanteVenezuela?: string }>(`/transactions/${id}/proofs`);
+        return response.data;
+    },
 };
