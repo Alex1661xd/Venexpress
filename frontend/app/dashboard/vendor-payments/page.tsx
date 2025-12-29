@@ -50,17 +50,17 @@ export default function VendorPaymentsPage() {
         filters.endDate,
         filters.vendorId ? Number(filters.vendorId) : undefined,
       );
-      // Solo transacciones con tasa de compra establecida
-      const withPurchaseRate = data.filter(
-        (t: Transaction) => t.isPurchaseRateSet && t.purchaseRate != null,
+      // Filtrar transacciones pendientes de pago de comisión
+      const pendingPayment = data.filter(
+        (t: Transaction) => !t.isCommissionPaidToVendor,
       );
-      setTransactions(withPurchaseRate);
+      setTransactions(pendingPayment);
       setSelectedIds([]);
 
       // Calcular totales de comisión
       const byVendor: Record<number, { vendorId: number; vendorName: string; totalCommission: number }> = {};
       let global = 0;
-      withPurchaseRate.forEach((tx: Transaction) => {
+      pendingPayment.forEach((tx: Transaction) => {
         const vendorId = (tx.createdBy as any)?.id as number;
         const vendorName = (tx.createdBy as any)?.name || `Vendedor #${vendorId}`;
         const commission = getCommission(tx);
@@ -138,7 +138,7 @@ export default function VendorPaymentsPage() {
         </h1>
         <p className="text-sm text-gray-600 mt-1">
           Administra las comisiones (2%) pagadas a los vendedores sobre las
-          transacciones completadas con tasa de compra establecida.
+          transacciones completadas (pendientes de pago).
         </p>
       </div>
 
@@ -214,7 +214,7 @@ export default function VendorPaymentsPage() {
         </div>
         <div className="flex justify-between items-center mt-4">
           <p className="text-xs text-gray-500">
-            Mostrando solo transacciones COMPLETADAS con tasa de compra.
+            Mostrando solo transacciones COMPLETADAS y PENDIENTES DE PAGO.
           </p>
           <div className="flex gap-2">
             <Button
@@ -280,7 +280,7 @@ export default function VendorPaymentsPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3">
-                  
+
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Fecha
