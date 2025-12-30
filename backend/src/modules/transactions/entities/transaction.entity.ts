@@ -47,6 +47,9 @@ export class Transaction {
   @Column({ nullable: true })
   beneficiaryPhone: string;
 
+  @Column({ nullable: true, default: false })
+  beneficiaryIsPagoMovil: boolean;
+
   @Column('decimal', { precision: 12, scale: 2 })
   amountCOP: number;
 

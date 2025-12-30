@@ -12,6 +12,9 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { TransactionStatus } from '../../common/enums/transaction-status.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { SetPurchaseRateDto } from './dto/set-purchase-rate.dto';
+import { VenezuelaPayment } from './entities/venezuela-payment.entity';
+import { CreateVenezuelaPaymentDto } from './dto/create-venezuela-payment.dto';
+import { VenezuelaDebtSummary, TransactionDebtDetail, VenezuelaPaymentDetail } from './dto/venezuela-debt-detail.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -22,6 +25,8 @@ export class TransactionsService {
     private historyRepository: Repository<TransactionHistory>,
     @InjectRepository(Beneficiary)
     private beneficiariesRepository: Repository<Beneficiary>,
+    @InjectRepository(VenezuelaPayment)
+    private venezuelaPaymentsRepository: Repository<VenezuelaPayment>,
     private ratesService: RatesService,
   ) { }
 
@@ -68,6 +73,7 @@ export class TransactionsService {
       beneficiaryAccountNumber: beneficiary.accountNumber,
       beneficiaryAccountType: beneficiary.accountType,
       beneficiaryPhone: beneficiary.phone || null,
+      beneficiaryIsPagoMovil: beneficiary.isPagoMovil || false,
 
       lastEditedAt: new Date(), // Initialize timer
     });
@@ -374,6 +380,7 @@ export class TransactionsService {
       transaction.beneficiaryAccountNumber = beneficiary.accountNumber;
       transaction.beneficiaryAccountType = beneficiary.accountType;
       transaction.beneficiaryPhone = beneficiary.phone || null;
+      transaction.beneficiaryIsPagoMovil = beneficiary.isPagoMovil || false;
     }
 
     // Actualizar notas si se proporcionan
@@ -967,6 +974,92 @@ export class TransactionsService {
     };
   }
 
+  /**
+   * Resumen financiero para Admin Venezuela: ganancias y deuda de Colombia.
+   * Usa solo transacciones COMPLETADAS con tasa de compra establecida.
+   */
+  async getAdminVenezuelaFinancialSummary(query: any): Promise<any> {
+    const { startDate, endDate } = query;
+
+    let dateFrom = new Date(0);
+    let dateTo = new Date();
+
+    if (startDate) {
+      dateFrom = new Date(`${startDate}T00:00:00`);
+    }
+    if (endDate) {
+      dateTo = new Date(`${endDate}T23:59:59.999`);
+    }
+
+    const transactions = await this.transactionsRepository.find({
+      where: {
+        status: TransactionStatus.COMPLETADO,
+        isPurchaseRateSet: true,
+        createdAt: Between(dateFrom, dateTo),
+      },
+      relations: ['createdBy'],
+      order: { createdAt: 'ASC' },
+    });
+
+    let totalEarnings = 0; // Ganancias de Admin Venezuela
+    let totalDebtFromColombia = 0; // Deuda de Admin Colombia con Venezuela
+
+    transactions.forEach((tx) => {
+      const cop = Number(tx.amountCOP) || 0;
+      const bs = Number(tx.amountBs) || 0;
+      const saleRate = Number(tx.saleRate) || 0;
+      const purchaseRate = Number(tx.purchaseRate) || 0;
+
+      if (!saleRate || !purchaseRate) {
+        return;
+      }
+
+      // Cálculos según las fórmulas proporcionadas
+      const bolivares = bs;
+      const inversion = bolivares * purchaseRate;
+      const gananciaSistema = cop - inversion;
+      const gananciaAdminVenezuela = gananciaSistema / 2; // La otra mitad
+      const deudaColombiaConVenezuela = inversion + (gananciaSistema / 2); // Inversión + mitad de Colombia
+
+      totalEarnings += gananciaAdminVenezuela;
+      totalDebtFromColombia += deudaColombiaConVenezuela;
+    });
+
+    // Obtener pagos de Colombia a Venezuela
+    let payments = [];
+    let totalPaid = 0;
+    
+    try {
+      payments = await this.venezuelaPaymentsRepository.find({
+        where: {
+          paymentDate: Between(dateFrom, dateTo),
+        },
+        relations: ['createdBy'],
+        order: { paymentDate: 'DESC' },
+      });
+      totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    } catch (error) {
+      // Si la tabla no existe aún o hay un error, continuar sin pagos
+      console.warn('Error fetching venezuela payments:', error.message);
+    }
+
+    return {
+      totalEarnings, // Ganancias de Admin Venezuela
+      totalDebtFromColombia, // Deuda total de Admin Colombia
+      totalPaid, // Total pagado por Admin Colombia en este período
+      pendingDebt: totalDebtFromColombia - totalPaid, // Deuda pendiente
+      transactionCount: transactions.length,
+      payments: payments.map(p => ({
+        id: p.id,
+        amount: Number(p.amount),
+        paymentDate: p.paymentDate,
+        paidBy: p.createdBy?.name,
+        notes: p.notes,
+      })),
+      dateRange: { from: dateFrom, to: dateTo },
+    };
+  }
+
   // Reenviar transacción rechazada
   async resendRejectedTransaction(
     id: number,
@@ -1521,6 +1614,167 @@ export class TransactionsService {
     queryBuilder.orderBy('transaction.createdAt', 'ASC');
 
     return queryBuilder.getMany();
+  }
+
+  /**
+   * Obtiene el detalle completo de la deuda de Admin Colombia con Admin Venezuela
+   * Incluye desglose por transacción y pagos realizados
+   */
+  async getVenezuelaDebtDetail(query: any, user: User): Promise<VenezuelaDebtSummary> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA) {
+      throw new ForbiddenException('Solo Admin Colombia puede ver la deuda con Venezuela');
+    }
+
+    const { startDate, endDate } = query;
+
+    let dateFrom = new Date(0);
+    let dateTo = new Date();
+
+    if (startDate) {
+      dateFrom = new Date(`${startDate}T00:00:00`);
+    }
+    if (endDate) {
+      dateTo = new Date(`${endDate}T23:59:59.999`);
+    }
+
+    // Obtener transacciones completadas con tasa de compra establecida
+    const transactions = await this.transactionsRepository.find({
+      where: {
+        status: TransactionStatus.COMPLETADO,
+        isPurchaseRateSet: true,
+        createdAt: Between(dateFrom, dateTo),
+      },
+      relations: ['createdBy', 'beneficiary'],
+      order: { createdAt: 'ASC' },
+    });
+
+    let totalDebt = 0;
+    const transactionDetails: TransactionDebtDetail[] = [];
+
+    transactions.forEach((tx) => {
+      const cop = Number(tx.amountCOP) || 0;
+      const bs = Number(tx.amountBs) || 0;
+      const saleRate = Number(tx.saleRate) || 0;
+      const purchaseRate = Number(tx.purchaseRate) || 0;
+
+      if (!saleRate || !purchaseRate) {
+        return;
+      }
+
+      // Cálculos detallados
+      const bolivares = bs;
+      const inversion = bolivares * purchaseRate;
+      const gananciaSistema = cop - inversion;
+      const gananciaAdminColombia = gananciaSistema / 2;
+      const gananciaAdminVenezuela = gananciaSistema / 2;
+      const deudaConVenezuela = inversion + gananciaAdminVenezuela;
+
+      totalDebt += deudaConVenezuela;
+
+      transactionDetails.push({
+        id: tx.id,
+        createdAt: tx.createdAt,
+        vendorName: tx.createdBy?.name || 'N/A',
+        beneficiaryFullName: tx.beneficiaryFullName,
+        amountCOP: cop,
+        amountBs: bs,
+        saleRate,
+        purchaseRate,
+        inversion,
+        gananciaSistema,
+        gananciaAdminColombia,
+        gananciaAdminVenezuela,
+        deudaConVenezuela,
+      });
+    });
+
+    // Obtener pagos realizados en el período
+    const payments = await this.venezuelaPaymentsRepository.find({
+      where: {
+        createdAt: Between(dateFrom, dateTo),
+      },
+      relations: ['createdBy'],
+      order: { createdAt: 'DESC' },
+    });
+
+    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const paymentDetails: VenezuelaPaymentDetail[] = payments.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      notes: p.notes || '',
+      proofUrl: p.proofUrl || '',
+      createdBy: p.createdBy?.name || 'N/A',
+      createdAt: p.createdAt,
+      paymentDate: p.paymentDate,
+    }));
+
+    return {
+      totalDebt,
+      totalPaid,
+      pendingDebt: totalDebt - totalPaid,
+      transactionDetails,
+      payments: paymentDetails,
+    };
+  }
+
+  /**
+   * Registra un pago de Admin Colombia a Admin Venezuela
+   */
+  async createVenezuelaPayment(
+    createPaymentDto: CreateVenezuelaPaymentDto,
+    user: User,
+  ): Promise<VenezuelaPayment> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA) {
+      throw new ForbiddenException('Solo Admin Colombia puede registrar pagos a Venezuela');
+    }
+
+    const payment = this.venezuelaPaymentsRepository.create({
+      amount: createPaymentDto.amount,
+      notes: createPaymentDto.notes,
+      proofUrl: createPaymentDto.proofUrl,
+      paymentDate: new Date(createPaymentDto.paymentDate),
+      createdBy: { id: user.id } as any,
+    });
+
+    return await this.venezuelaPaymentsRepository.save(payment);
+  }
+
+  /**
+   * Obtiene el historial completo de pagos a Venezuela
+   */
+  async getVenezuelaPaymentHistory(user: User): Promise<VenezuelaPayment[]> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA && user.role !== UserRole.ADMIN_VENEZUELA) {
+      throw new ForbiddenException('Solo administradores pueden ver el historial de pagos');
+    }
+
+    return await this.venezuelaPaymentsRepository.find({
+      relations: ['createdBy'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Elimina un pago de Venezuela (solo para correcciones)
+   */
+  async deleteVenezuelaPayment(id: number, user: User): Promise<void> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA) {
+      throw new ForbiddenException('Solo Admin Colombia puede eliminar pagos');
+    }
+
+    const payment = await this.venezuelaPaymentsRepository.findOne({
+      where: { id },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Pago no encontrado');
+    }
+
+    await this.venezuelaPaymentsRepository.remove(payment);
   }
 }
 

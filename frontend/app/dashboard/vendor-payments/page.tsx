@@ -6,6 +6,7 @@ import { transactionsService } from '@/services/transactions.service';
 import { Transaction } from '@/types/transaction';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { getLocalDateString } from '@/utils/date';
 
 interface Filters {
   startDate: string;
@@ -16,7 +17,7 @@ interface Filters {
 export default function VendorPaymentsPage() {
   const { user } = useAuth();
   const [filters, setFilters] = useState<Filters>(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     return { startDate: today, endDate: today };
   });
   const [loading, setLoading] = useState<boolean>(false);
@@ -150,15 +151,28 @@ export default function VendorPaymentsPage() {
             <p className="text-2xl font-bold text-gray-900 mt-1">{formatCOP(globalCommission)}</p>
           </div>
           <div className="sm:col-span-2">
-            <p className="text-sm text-gray-500 mb-2">Por vendedor</p>
+            <p className="text-sm text-gray-500 mb-2">Por vendedor (clic para filtrar)</p>
             <div className="flex flex-wrap gap-2">
               {totalsByVendor.map((v) => (
-                <span
+                <button
                   key={v.vendorId}
-                  className="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 text-xs text-gray-800"
+                  onClick={() => {
+                    if (filters.vendorId === String(v.vendorId)) {
+                      // Si ya está filtrado por este vendedor, quitar el filtro
+                      setFilters((prev) => ({ ...prev, vendorId: '' }));
+                    } else {
+                      // Filtrar por este vendedor
+                      setFilters((prev) => ({ ...prev, vendorId: String(v.vendorId) }));
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-full border text-xs transition-all ${
+                    filters.vendorId === String(v.vendorId)
+                      ? 'border-blue-500 bg-blue-100 text-blue-900 font-semibold'
+                      : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
+                  }`}
                 >
                   {v.vendorName}: <span className="font-semibold">{formatCOP(v.totalCommission)}</span>
-                </span>
+                </button>
               ))}
               {totalsByVendor.length === 0 && (
                 <span className="text-xs text-gray-500">Sin datos para los filtros actuales.</span>
@@ -199,17 +213,30 @@ export default function VendorPaymentsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              ID Vendedor (opcional)
+              Vendedor (opcional)
             </label>
-            <input
-              type="number"
-              value={filters.vendorId || ''}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, vendorId: e.target.value }))
-              }
-              placeholder="Ej: 3"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                value={filters.vendorId || ''}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, vendorId: e.target.value }))
+                }
+                placeholder="ID del vendedor o clic en el nombre arriba"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {filters.vendorId && (
+                <button
+                  onClick={() => setFilters((prev) => ({ ...prev, vendorId: '' }))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  title="Limpiar filtro"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex justify-between items-center mt-4">
@@ -221,7 +248,7 @@ export default function VendorPaymentsPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalDateString();
                 setFilters({ startDate: today, endDate: today });
               }}
             >

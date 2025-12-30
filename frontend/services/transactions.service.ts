@@ -181,6 +181,13 @@ export const transactionsService = {
         return response.data;
     },
 
+    async getAdminVenezuelaFinancialSummary(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/admin-venezuela/financial-summary', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
     async markVendorCommissionAsPaid(transactionIds: number[]): Promise<{ affected: number }> {
         const response = await api.post<{ affected: number }>('/transactions/admin-colombia/commission/mark-paid', {
             transactionIds,
@@ -194,5 +201,39 @@ export const transactionsService = {
     async getTransactionProofs(id: number): Promise<{ comprobanteCliente?: string; comprobanteVenezuela?: string }> {
         const response = await api.get<{ comprobanteCliente?: string; comprobanteVenezuela?: string }>(`/transactions/${id}/proofs`);
         return response.data;
+    },
+
+    // Venezuela Debt endpoints
+    /**
+     * Obtiene el detalle completo de la deuda con Admin Venezuela
+     */
+    async getVenezuelaDebtDetail(startDate?: string, endDate?: string): Promise<any> {
+        const response = await api.get('/transactions/venezuela-debt/detail', {
+            params: { startDate, endDate },
+        });
+        return response.data;
+    },
+
+    /**
+     * Registra un pago a Admin Venezuela
+     */
+    async createVenezuelaPayment(data: { amount: number; notes?: string; proofUrl?: string; paymentDate: string }): Promise<any> {
+        const response = await api.post('/transactions/venezuela-debt/payment', data);
+        return response.data;
+    },
+
+    /**
+     * Obtiene el historial de pagos a Venezuela
+     */
+    async getVenezuelaPaymentHistory(): Promise<any[]> {
+        const response = await api.get('/transactions/venezuela-debt/payments');
+        return response.data;
+    },
+
+    /**
+     * Elimina un pago a Venezuela
+     */
+    async deleteVenezuelaPayment(id: number): Promise<void> {
+        await api.delete(`/transactions/venezuela-debt/payment/${id}`);
     },
 };

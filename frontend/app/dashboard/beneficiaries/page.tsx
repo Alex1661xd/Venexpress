@@ -13,6 +13,23 @@ import { clientsService } from '@/services/clients.service';
 import { Beneficiary } from '@/types/beneficiary';
 import { Client } from '@/types/client';
 
+const VENEZUELAN_BANKS = [
+    { code: '0191', name: 'BNC' },
+    { code: '0151', name: 'BFC' },
+    { code: '0116', name: 'BOD' },
+    { code: '0163', name: 'TESORO' },
+    { code: '0134', name: 'BANESCO' },
+    { code: '0175', name: 'BICENTENARIO' },
+    { code: '0102', name: 'VENEZUELA' },
+    { code: '0105', name: 'MERCANTIL' },
+    { code: '0108', name: 'PROVINCIAL' },
+    { code: '0114', name: 'BANCARIBE' },
+    { code: '0146', name: 'BANGENTE' },
+    { code: '0137', name: 'SOFITASA' },
+    { code: '0168', name: 'BANCRECER' },
+    { code: '0174', name: 'BANPLUS' },
+];
+
 export default function BeneficiariesPage() {
     const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
     const [filteredBeneficiaries, setFilteredBeneficiaries] = useState<Beneficiary[]>([]);
@@ -28,6 +45,7 @@ export default function BeneficiariesPage() {
         accountNumber: '',
         accountType: 'ahorro',
         phone: '',
+        isPagoMovil: false,
         clientColombiaId: '',
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -79,7 +97,8 @@ export default function BeneficiariesPage() {
             ben.fullName.toLowerCase().includes(query.toLowerCase()) ||
             ben.documentId.includes(query) ||
             ben.bankName.toLowerCase().includes(query.toLowerCase()) ||
-            ben.accountNumber.includes(query)
+            ben.accountNumber?.includes(query) ||
+            ben.phone?.includes(query)
         );
         setFilteredBeneficiaries(filtered);
     };
@@ -104,6 +123,7 @@ export default function BeneficiariesPage() {
             accountNumber: '',
             accountType: 'ahorro',
             phone: '',
+            isPagoMovil: false,
             clientColombiaId: '',
         });
         setFormErrors({});
@@ -116,9 +136,10 @@ export default function BeneficiariesPage() {
             fullName: beneficiary.fullName,
             documentId: beneficiary.documentId,
             bankName: beneficiary.bankName,
-            accountNumber: beneficiary.accountNumber,
-            accountType: beneficiary.accountType,
+            accountNumber: beneficiary.accountNumber || '',
+            accountType: beneficiary.accountType || 'ahorro',
             phone: beneficiary.phone || '',
+            isPagoMovil: beneficiary.isPagoMovil || false,
             clientColombiaId: beneficiary.clientColombia?.id || '',
         });
         setFormErrors({});
@@ -140,10 +161,24 @@ export default function BeneficiariesPage() {
             errors.bankName = 'El banco es requerido';
         }
 
-        if (!formData.accountNumber.trim()) {
-            errors.accountNumber = 'El número de cuenta es requerido';
-        } else if (!/^\d{20}$/.test(formData.accountNumber)) {
-            errors.accountNumber = 'El número de cuenta debe tener 20 dígitos';
+        if (formData.isPagoMovil) {
+            // Validaciones para Pago Móvil
+            if (!formData.phone || !formData.phone.trim()) {
+                errors.phone = 'El teléfono es requerido para pago móvil';
+            } else {
+                // Remover espacios, guiones y paréntesis para validar
+                const cleanPhone = formData.phone.replace(/[\s\-\(\)]/g, '');
+                if (!/^04\d{9}$/.test(cleanPhone)) {
+                    errors.phone = 'El teléfono debe tener formato 04XXXXXXXXX (11 dígitos, empezando con 04)';
+                }
+            }
+        } else {
+            // Validaciones para Transferencia Bancaria
+            if (!formData.accountNumber.trim()) {
+                errors.accountNumber = 'El número de cuenta es requerido';
+            } else if (!/^\d{20}$/.test(formData.accountNumber)) {
+                errors.accountNumber = 'El número de cuenta debe tener 20 dígitos';
+            }
         }
 
         if (!formData.clientColombiaId) {
@@ -161,8 +196,14 @@ export default function BeneficiariesPage() {
 
         setSaving(true);
         try {
+            // Limpiar el teléfono antes de enviar (remover espacios, guiones, etc.)
+            const cleanPhone = formData.isPagoMovil && formData.phone 
+                ? formData.phone.replace(/[\s\-\(\)]/g, '') 
+                : formData.phone;
+
             const dataToSend = {
                 ...formData,
+                phone: cleanPhone,
                 clientColombiaId: Number(formData.clientColombiaId),
             };
 
@@ -252,13 +293,24 @@ export default function BeneficiariesPage() {
                                     <tr key={beneficiary.id} className="hover:bg-gray-50">
                                         <td className="px-4 lg:px-6 py-4">
                                             <div className="font-medium text-gray-900 text-sm">{beneficiary.fullName}</div>
-                                            <div className="text-xs text-gray-500">{beneficiary.phone}</div>
+                                            <div className="text-xs text-gray-500">
+                                                {beneficiary.isPagoMovil ? '📱 Pago Móvil' : '🏦 Transferencia'}
+                                                {beneficiary.phone && ` · ${beneficiary.phone}`}
+                                            </div>
                                         </td>
                                         <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{beneficiary.documentId}</td>
                                         <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{beneficiary.bankName}</td>
                                         <td className="px-4 lg:px-6 py-4">
-                                            <div className="text-gray-900 font-mono text-xs md:text-sm">{beneficiary.accountNumber}</div>
-                                            <div className="text-xs text-gray-500 capitalize">{beneficiary.accountType}</div>
+                                            {beneficiary.isPagoMovil ? (
+                                                <div className="text-gray-900 text-sm">
+                                                    {beneficiary.phone || '-'}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="text-gray-900 font-mono text-xs md:text-sm">{beneficiary.accountNumber}</div>
+                                                    <div className="text-xs text-gray-500 capitalize">{beneficiary.accountType}</div>
+                                                </>
+                                            )}
                                         </td>
                                         <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">
                                             {beneficiary.clientColombia?.name || '-'}
@@ -361,9 +413,23 @@ export default function BeneficiariesPage() {
                         </div>
                     )}
 
+                    {/* Checkbox Pago Móvil */}
+                    <div className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                        <input
+                            type="checkbox"
+                            id="isPagoMovil"
+                            checked={formData.isPagoMovil}
+                            onChange={(e) => setFormData({ ...formData, isPagoMovil: e.target.checked })}
+                            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="isPagoMovil" className="text-sm font-medium text-blue-900 cursor-pointer">
+                            Este destinatario usa Pago Móvil
+                        </label>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Input
-                            label="Nombre completo"
+                            label="Nombre completo *"
                             placeholder="Ej: María González"
                             value={formData.fullName}
                             onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
@@ -371,7 +437,7 @@ export default function BeneficiariesPage() {
                         />
 
                         <Input
-                            label="Documento"
+                            label="Cédula *"
                             placeholder="V-12345678"
                             value={formData.documentId}
                             onChange={(e) => setFormData({ ...formData, documentId: e.target.value })}
@@ -379,45 +445,80 @@ export default function BeneficiariesPage() {
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Input
-                            label="Banco"
-                            placeholder="Banco de Venezuela"
-                            value={formData.bankName}
-                            onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                            error={formErrors.bankName}
-                        />
-
-                        <Input
-                            label="Teléfono (opcional)"
-                            placeholder="04121234567"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            error={formErrors.phone}
-                        />
-                    </div>
-
-                    <Input
-                        label="Número de cuenta (20 dígitos)"
-                        placeholder="01020123456789012345"
-                        value={formData.accountNumber}
-                        onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                        error={formErrors.accountNumber}
-                    />
-
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Tipo de cuenta
+                            Banco *
                         </label>
                         <select
-                            value={formData.accountType}
-                            onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
-                            className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+                            value={formData.bankName}
+                            onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                            className={`w-full px-4 py-2.5 border-2 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none ${formErrors.bankName ? 'border-red-500' : 'border-gray-200'
+                                }`}
                         >
-                            <option value="ahorro">Ahorro</option>
-                            <option value="corriente">Corriente</option>
+                            <option value="">Selecciona un banco</option>
+                            {VENEZUELAN_BANKS.map(bank => (
+                                <option key={bank.code} value={`${bank.name} (${bank.code})`}>
+                                    {bank.name} ({bank.code})
+                                </option>
+                            ))}
                         </select>
+                        {formErrors.bankName && (
+                            <p className="mt-1 text-sm text-red-600">{formErrors.bankName}</p>
+                        )}
                     </div>
+
+                    {formData.isPagoMovil ? (
+                        // Campos para Pago Móvil
+                        <>
+                            <Input
+                                label="Teléfono Pago Móvil *"
+                                placeholder="04121234567 (11 dígitos, formato: 04XXXXXXXXX)"
+                                value={formData.phone}
+                                onChange={(e) => {
+                                    // Permitir solo números, espacios, guiones y paréntesis
+                                    const value = e.target.value.replace(/[^\d\s\-\(\)]/g, '');
+                                    setFormData({ ...formData, phone: value });
+                                }}
+                                error={formErrors.phone}
+                            />
+                            <p className="text-xs text-gray-500 -mt-2">
+                                Formato: 04 seguido de 9 dígitos (ej: 04121234567)
+                            </p>
+                        </>
+                    ) : (
+                        // Campos para Transferencia Bancaria
+                        <>
+                            <Input
+                                label="Número de cuenta (20 dígitos) *"
+                                placeholder="01020123456789012345"
+                                value={formData.accountNumber}
+                                onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                                error={formErrors.accountNumber}
+                            />
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Tipo de cuenta *
+                                </label>
+                                <select
+                                    value={formData.accountType}
+                                    onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
+                                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+                                >
+                                    <option value="ahorro">Ahorro</option>
+                                    <option value="corriente">Corriente</option>
+                                </select>
+                            </div>
+
+                            <Input
+                                label="Teléfono (opcional)"
+                                placeholder="04121234567"
+                                value={formData.phone}
+                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                error={formErrors.phone}
+                            />
+                        </>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">

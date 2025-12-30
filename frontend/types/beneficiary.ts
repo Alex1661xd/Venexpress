@@ -3,9 +3,10 @@ export interface Beneficiary {
     fullName: string;
     documentId: string;
     bankName: string;
-    accountNumber: string;
-    accountType: 'ahorro' | 'corriente';
+    accountNumber?: string;
+    accountType?: 'ahorro' | 'corriente';
     phone?: string;
+    isPagoMovil: boolean;
     clientColombia?: {
         id: number;
         name: string;
@@ -22,9 +23,10 @@ export interface CreateBeneficiaryDto {
     fullName: string;
     documentId: string;
     bankName: string;
-    accountNumber: string;
-    accountType: string;
+    accountNumber?: string;
+    accountType?: string;
     phone?: string;
+    isPagoMovil?: boolean;
     clientColombiaId: number; // Obligatorio para vendedores
     userAppId?: number;
 }
@@ -36,5 +38,6 @@ export interface UpdateBeneficiaryDto {
     accountNumber?: string;
     accountType?: 'ahorro' | 'corriente';
     phone?: string;
+    isPagoMovil?: boolean;
     clientColombiaId?: number;
 }

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsNumber, IsBoolean } from 'class-validator';
 
 export class CreateBeneficiaryDto {
   @IsNotEmpty()
@@ -11,19 +11,23 @@ export class CreateBeneficiaryDto {
 
   @IsNotEmpty()
   @IsString()
-  bankName: string;
-
-  @IsNotEmpty()
-  @IsString()
-  accountNumber: string;
-
-  @IsNotEmpty()
-  @IsString()
-  accountType: string;
+  bankName: string; // Nombre del banco o código para pago móvil
 
   @IsOptional()
   @IsString()
-  phone?: string;
+  accountNumber?: string; // Requerido solo si no es pago móvil
+
+  @IsOptional()
+  @IsString()
+  accountType?: string; // Requerido solo si no es pago móvil
+
+  @IsOptional()
+  @IsString()
+  phone?: string; // Requerido si es pago móvil
+
+  @IsOptional()
+  @IsBoolean()
+  isPagoMovil?: boolean; // Default false
 
   @IsNotEmpty()
   @IsNumber()

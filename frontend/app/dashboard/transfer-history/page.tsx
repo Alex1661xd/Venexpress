@@ -7,6 +7,7 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import { transactionsService } from '@/services/transactions.service';
 import { Transaction } from '@/types/transaction';
+import { getLocalDateString, getDateDaysAgo, getFirstDayOfMonth } from '@/utils/date';
 
 export default function TransferHistoryPage() {
     const { user } = useAuth();
@@ -87,8 +88,7 @@ export default function TransferHistoryPage() {
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const todayStr = today.toISOString().split('T')[0];
+                                const todayStr = getLocalDateString();
                                 setStartDate(todayStr);
                                 setEndDate(todayStr);
                             }}
@@ -98,11 +98,10 @@ export default function TransferHistoryPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const fifteenDaysAgo = new Date();
-                                fifteenDaysAgo.setDate(today.getDate() - 15);
-                                setStartDate(fifteenDaysAgo.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const fifteenDaysAgo = getDateDaysAgo(15);
+                                setStartDate(fifteenDaysAgo);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -110,10 +109,10 @@ export default function TransferHistoryPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                                setStartDate(firstDayOfMonth.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const firstDay = getFirstDayOfMonth();
+                                setStartDate(firstDay);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -342,23 +341,71 @@ export default function TransferHistoryPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
-                            <div>
-                                <p className="text-xs text-gray-500 mb-1">Beneficiario</p>
-                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-900">Datos del Destinatario</h4>
+                                {selectedTransaction.beneficiaryIsPagoMovil && (
+                                    <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
+                                        📱 PAGO MÓVIL
+                                    </span>
+                                )}
                             </div>
-                            <div>
-                                <p className="text-xs text-gray-500 mb-1">Documento</p>
-                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 mb-1">Banco</p>
-                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 mb-1">Cuenta</p>
-                                <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber}</p>
-                            </div>
+                            
+                            {selectedTransaction.beneficiaryIsPagoMovil ? (
+                                // Layout para Pago Móvil
+                                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Nombre Completo</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Cédula</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Banco</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">📱 Teléfono Pago Móvil</p>
+                                            <p className="font-mono text-base font-bold text-blue-900">{selectedTransaction.beneficiaryPhone || '-'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                // Layout para Transferencia Bancaria
+                                <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Nombre Completo</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Cédula</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Banco</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Número de Cuenta</p>
+                                            <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Tipo de Cuenta</p>
+                                            <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType || '-'}</p>
+                                        </div>
+                                        {selectedTransaction.beneficiaryPhone && (
+                                            <div>
+                                                <p className="text-xs text-gray-500 mb-1">Teléfono</p>
+                                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryPhone}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

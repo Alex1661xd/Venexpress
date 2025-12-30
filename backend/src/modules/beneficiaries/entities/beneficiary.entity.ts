@@ -21,16 +21,19 @@ export class Beneficiary {
   documentId: string;
 
   @Column()
-  bankName: string;
-
-  @Column()
-  accountNumber: string;
-
-  @Column()
-  accountType: string; // ahorro, corriente
+  bankName: string; // Nombre del banco o código de banco (para pago móvil)
 
   @Column({ nullable: true })
-  phone: string;
+  accountNumber: string; // Null si es pago móvil
+
+  @Column({ nullable: true })
+  accountType: string; // ahorro, corriente - Null si es pago móvil
+
+  @Column({ nullable: true })
+  phone: string; // Requerido para pago móvil
+
+  @Column({ default: false })
+  isPagoMovil: boolean; // Indica si es pago móvil o transferencia bancaria
 
   @ManyToOne(() => Client, { nullable: true })
   clientColombia: Client;

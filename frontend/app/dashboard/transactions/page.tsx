@@ -11,6 +11,7 @@ import { Transaction } from '@/types/transaction';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { getLocalDateString, getDateDaysAgo, getFirstDayOfMonth } from '@/utils/date';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -25,12 +26,8 @@ export default function TransactionsPage() {
     const itemsPerPage = 5;
 
     // Date filter states - default to today
-    const getTodayDateString = () => {
-        const today = new Date();
-        return today.toISOString().split('T')[0];
-    };
-    const [startDate, setStartDate] = useState<string>(getTodayDateString());
-    const [endDate, setEndDate] = useState<string>(getTodayDateString());
+    const [startDate, setStartDate] = useState<string>(getLocalDateString());
+    const [endDate, setEndDate] = useState<string>(getLocalDateString());
     const [alertState, setAlertState] = useState<{ isOpen: boolean; message: string; variant?: 'error' | 'success' | 'warning' | 'info' }>({
         isOpen: false,
         message: '',
@@ -514,14 +511,12 @@ export default function TransactionsPage() {
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const todayStr = today.toISOString().split('T')[0];
+                                const todayStr = getLocalDateString();
                                 setStartDate(todayStr);
                                 setEndDate(todayStr);
                             }}
                             className={`px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${(() => {
-                                const today = new Date();
-                                const todayStr = today.toISOString().split('T')[0];
+                                const todayStr = getLocalDateString();
                                 return startDate === todayStr && endDate === todayStr;
                             })()
                                 ? 'bg-blue-600 text-white'
@@ -532,11 +527,10 @@ export default function TransactionsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const fifteenDaysAgo = new Date();
-                                fifteenDaysAgo.setDate(today.getDate() - 15);
-                                setStartDate(fifteenDaysAgo.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const fifteenDaysAgo = getDateDaysAgo(15);
+                                setStartDate(fifteenDaysAgo);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -544,10 +538,10 @@ export default function TransactionsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                                setStartDate(firstDayOfMonth.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const firstDay = getFirstDayOfMonth();
+                                setStartDate(firstDay);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -631,7 +625,11 @@ export default function TransactionsPage() {
                                             <td className="px-4 lg:px-6 py-4 text-gray-900 font-medium text-sm">#{transaction.id}</td>
                                             <td className="px-4 lg:px-6 py-4">
                                                 <div className="font-medium text-gray-900 text-sm">{transaction.beneficiaryFullName}</div>
-                                                <div className="text-xs text-gray-500">{transaction.beneficiaryAccountNumber}</div>
+                                                <div className="text-xs text-gray-500">
+                                                    {transaction.beneficiaryDocumentId && `${transaction.beneficiaryDocumentId}`}
+                                                    {transaction.beneficiaryDocumentId && transaction.beneficiaryAccountNumber && ' · '}
+                                                    {transaction.beneficiaryAccountNumber || (transaction.beneficiaryPhone && `📱 ${transaction.beneficiaryPhone}`)}
+                                                </div>
                                             </td>
                                             <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{transaction.beneficiaryBankName}</td>
                                             <td className="px-4 lg:px-6 py-4 text-right font-semibold text-gray-900 text-sm">
@@ -886,28 +884,70 @@ export default function TransactionsPage() {
 
                         {/* Beneficiary Info */}
                         <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-
-                                Destinatario
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl">
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Nombre</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Banco</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Cuenta</p>
-                                    <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-1">Tipo de Cuenta</p>
-                                    <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType}</p>
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-semibold text-gray-900">Datos del Destinatario</h3>
+                                {selectedTransaction.beneficiaryIsPagoMovil && (
+                                    <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
+                                        📱 PAGO MÓVIL
+                                    </span>
+                                )}
                             </div>
+                            
+                            {selectedTransaction.beneficiaryIsPagoMovil ? (
+                                // Layout para Pago Móvil
+                                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Nombre Completo</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Cédula</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">Banco</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium mb-1">📱 Teléfono Pago Móvil</p>
+                                            <p className="font-mono text-base font-bold text-blue-900">{selectedTransaction.beneficiaryPhone || '-'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                // Layout para Transferencia Bancaria
+                                <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Nombre Completo</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Cédula</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Banco</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Número de Cuenta</p>
+                                            <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Tipo de Cuenta</p>
+                                            <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType || '-'}</p>
+                                        </div>
+                                        {selectedTransaction.beneficiaryPhone && (
+                                            <div>
+                                                <p className="text-xs text-gray-500 mb-1">Teléfono</p>
+                                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryPhone}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Client Info */}

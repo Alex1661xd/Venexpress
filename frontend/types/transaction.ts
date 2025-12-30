@@ -36,9 +36,10 @@ export interface Transaction {
     beneficiaryFullName: string;
     beneficiaryDocumentId: string;
     beneficiaryBankName: string;
-    beneficiaryAccountNumber: string;
-    beneficiaryAccountType: string;
+    beneficiaryAccountNumber?: string;
+    beneficiaryAccountType?: string;
     beneficiaryPhone?: string;
+    beneficiaryIsPagoMovil?: boolean;
 
     amountCOP: number;
     amountBs: number;

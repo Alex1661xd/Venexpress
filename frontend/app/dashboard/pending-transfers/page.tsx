@@ -452,34 +452,71 @@ export default function PendingTransfersPage() {
                         </div>
 
                         {/* Beneficiary Details */}
-                        <div className="p-4 bg-gray-50 rounded-xl space-y-3">
-                            <h4 className="font-semibold text-gray-900">Datos del Destinatario</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                <div>
-                                    <p className="text-xs text-gray-500">Nombre Completo</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500">Documento</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500">Banco</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500">Número de Cuenta</p>
-                                    <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500">Tipo de Cuenta</p>
-                                    <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-gray-500">Teléfono</p>
-                                    <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryPhone || 'N/A'}</p>
-                                </div>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-900">Datos del Destinatario</h4>
+                                {selectedTransaction.beneficiaryIsPagoMovil && (
+                                    <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
+                                        📱 PAGO MÓVIL
+                                    </span>
+                                )}
                             </div>
+                            
+                            {selectedTransaction.beneficiaryIsPagoMovil ? (
+                                // Layout para Pago Móvil
+                                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium">Nombre Completo</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium">Cédula</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium">Banco</p>
+                                            <p className="font-semibold text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-blue-600 font-medium">📱 Teléfono Pago Móvil</p>
+                                            <p className="font-mono text-base font-bold text-blue-900">{selectedTransaction.beneficiaryPhone || '-'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                // Layout para Transferencia Bancaria
+                                <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-xs text-gray-500">Nombre Completo</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryFullName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Cédula</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryDocumentId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Banco</p>
+                                            <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryBankName}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Número de Cuenta</p>
+                                            <p className="font-mono text-sm text-gray-900">{selectedTransaction.beneficiaryAccountNumber || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Tipo de Cuenta</p>
+                                            <p className="font-medium text-gray-900 capitalize">{selectedTransaction.beneficiaryAccountType || '-'}</p>
+                                        </div>
+                                        {selectedTransaction.beneficiaryPhone && (
+                                            <div>
+                                                <p className="text-xs text-gray-500">Teléfono</p>
+                                                <p className="font-medium text-gray-900">{selectedTransaction.beneficiaryPhone}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Transaction Details */}

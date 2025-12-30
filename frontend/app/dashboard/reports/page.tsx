@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import Card from '@/components/ui/Card';
 import { transactionsService } from '@/services/transactions.service';
+import { getLocalDateString, getDateDaysAgo, getFirstDayOfMonth } from '@/utils/date';
 
 interface ReportData {
     summary: {
@@ -58,8 +59,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         // Set default dates (today)
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = getLocalDateString();
 
         setEndDate(todayStr);
         setStartDate(todayStr);
@@ -186,9 +186,9 @@ export default function ReportsPage() {
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                setStartDate(today.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                setStartDate(today);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -196,11 +196,10 @@ export default function ReportsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const fifteenDaysAgo = new Date();
-                                fifteenDaysAgo.setDate(today.getDate() - 15);
-                                setStartDate(fifteenDaysAgo.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const fifteenDaysAgo = getDateDaysAgo(15);
+                                setStartDate(fifteenDaysAgo);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >
@@ -208,10 +207,10 @@ export default function ReportsPage() {
                         </button>
                         <button
                             onClick={() => {
-                                const today = new Date();
-                                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                                setStartDate(firstDayOfMonth.toISOString().split('T')[0]);
-                                setEndDate(today.toISOString().split('T')[0]);
+                                const today = getLocalDateString();
+                                const firstDay = getFirstDayOfMonth();
+                                setStartDate(firstDay);
+                                setEndDate(today);
                             }}
                             className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                         >

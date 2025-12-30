@@ -11,6 +11,7 @@ import { ratesService } from '@/services/rates.service';
 import { transactionsService } from '@/services/transactions.service';
 import { ExchangeRate } from '@/types/rate';
 import { Transaction } from '@/types/transaction';
+import { getLocalDateString } from '@/utils/date';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -18,6 +19,7 @@ export default function DashboardPage() {
     const [currentRate, setCurrentRate] = useState<ExchangeRate | null>(null);
     const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
     const [stats, setStats] = useState({ total: 0, pendientes: 0, rechazadas: 0, completadas: 0 });
+    const [todayEarnings, setTodayEarnings] = useState<number | null>(null);
     const [loadingData, setLoadingData] = useState(true);
     const [showCalculator, setShowCalculator] = useState(false);
 
@@ -45,9 +47,12 @@ export default function DashboardPage() {
             setCurrentRate(rate);
 
             if (user?.role === 'admin_venezuela') {
-                // Para admin_venezuela, cargar giros pendientes
+                // Para admin_venezuela, cargar giros pendientes y ganancias de hoy
                 const pendingTransfers = await transactionsService.getPendingVenezuela();
                 const reports = await transactionsService.getReports();
+                
+                const today = getLocalDateString();
+                const financialSummary = await transactionsService.getAdminVenezuelaFinancialSummary(today, today);
 
                 setStats({
                     total: reports.summary.totalTransactions,
@@ -55,11 +60,15 @@ export default function DashboardPage() {
                     rechazadas: reports.summary.rejectedCount,
                     completadas: reports.summary.completedCount,
                 });
+                setTodayEarnings(financialSummary.totalEarnings);
                 setRecentTransactions(pendingTransfers.slice(0, 3));
             } else if (user?.role === 'admin_colombia') {
-                // Para admin_colombia, cargar datos consolidados de todos los vendedores
+                // Para admin_colombia, cargar datos consolidados de todos los vendedores y ganancias de hoy
                 const pendingTransfers = await transactionsService.getPendingAdminColombia();
                 const reports = await transactionsService.getReportsAdminColombia();
+                
+                const today = getLocalDateString();
+                const financialSummary = await transactionsService.getAdminColombiaFinancialSummary(today, today);
 
                 setStats({
                     total: reports.summary.totalTransactions,
@@ -67,6 +76,7 @@ export default function DashboardPage() {
                     rechazadas: reports.summary.rejectedCount,
                     completadas: reports.summary.completedCount,
                 });
+                setTodayEarnings(financialSummary.global.adminColombiaEarnings);
                 setRecentTransactions(pendingTransfers.slice(0, 3));
             } else {
                 // Para vendedores
@@ -111,14 +121,14 @@ export default function DashboardPage() {
                 </p>
             </div >
 
-            {/* Exchange Rate Card */}
-            {
-                currentRate && (
+            {/* Exchange Rate Card & Earnings */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                {currentRate && (
                     <div
-                        className="mb-8 cursor-pointer hover:scale-[1.02] transition-transform"
+                        className="cursor-pointer hover:scale-[1.02] transition-transform"
                         onClick={() => setShowCalculator(true)}
                     >
-                        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white h-full">
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-blue-100 text-sm mb-1">Tasa de cambio actual</p>
@@ -139,8 +149,31 @@ export default function DashboardPage() {
                             </div>
                         </Card>
                     </div>
-                )
-            }
+                )}
+
+                {/* Ganancias de Hoy - Solo para Admins */}
+                {(user?.role === 'admin_colombia' || user?.role === 'admin_venezuela') && todayEarnings !== null && (
+                    <Card className="bg-gradient-to-r from-green-600 to-emerald-600 text-white h-full">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-green-100 text-sm mb-1">Mis Ganancias Hoy</p>
+                                <p className="text-4xl font-bold">
+                                    ${todayEarnings.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                </p>
+                                <p className="text-green-100 text-xs mt-2">
+                                    {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                </p>
+                                <p className="text-green-200 text-xs mt-2 font-medium">
+                                    {user?.role === 'admin_colombia' ? 'Admin Colombia' : 'Admin Venezuela'}
+                                </p>
+                            </div>
+                            <svg className="w-20 h-20 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </Card>
+                )}
+            </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">

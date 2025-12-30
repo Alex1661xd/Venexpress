@@ -26,6 +26,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { SetPurchaseRateDto } from './dto/set-purchase-rate.dto';
 import { StorageService } from '../../common/services/storage.service';
+import { CreateVenezuelaPaymentDto } from './dto/create-venezuela-payment.dto';
 
 @Controller('transactions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -123,6 +124,12 @@ export class TransactionsController {
   @Roles(UserRole.ADMIN_COLOMBIA)
   getAdminColombiaFinancialSummary(@Query() query: any) {
     return this.transactionsService.getAdminColombiaFinancialSummary(query);
+  }
+
+  @Get('admin-venezuela/financial-summary')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  getAdminVenezuelaFinancialSummary(@Query() query: any) {
+    return this.transactionsService.getAdminVenezuelaFinancialSummary(query);
   }
 
   // Admin Venezuela endpoints
@@ -363,5 +370,46 @@ export class TransactionsController {
   @Roles(UserRole.ADMIN_COLOMBIA)
   remove(@Param('id') id: string) {
     return this.transactionsService.remove(+id);
+  }
+
+  // Venezuela Payment endpoints
+  /**
+   * Obtiene el detalle completo de la deuda con Admin Venezuela
+   * Incluye desglose por transacción con todos los cálculos
+   */
+  @Get('venezuela-debt/detail')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  getVenezuelaDebtDetail(@Query() query: any, @CurrentUser() user: any) {
+    return this.transactionsService.getVenezuelaDebtDetail(query, user);
+  }
+
+  /**
+   * Registra un pago de Admin Colombia a Admin Venezuela
+   */
+  @Post('venezuela-debt/payment')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  createVenezuelaPayment(
+    @Body() createPaymentDto: CreateVenezuelaPaymentDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.createVenezuelaPayment(createPaymentDto, user);
+  }
+
+  /**
+   * Obtiene el historial de pagos a Venezuela
+   */
+  @Get('venezuela-debt/payments')
+  @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA)
+  getVenezuelaPaymentHistory(@CurrentUser() user: any) {
+    return this.transactionsService.getVenezuelaPaymentHistory(user);
+  }
+
+  /**
+   * Elimina un pago (solo para correcciones)
+   */
+  @Delete('venezuela-debt/payment/:id')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  deleteVenezuelaPayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.transactionsService.deleteVenezuelaPayment(+id, user);
   }
 }
