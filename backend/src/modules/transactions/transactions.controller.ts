@@ -192,6 +192,35 @@ export class TransactionsController {
     return this.transactionsService.completeTransfer(+id, voucherPath, user);
   }
 
+  @Post(':id/update-voucher')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  @UseInterceptors(
+    FileInterceptor('voucher', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, cb) => {
+        if (file && !file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+          return cb(new BadRequestException('Solo se permiten imágenes y PDFs'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async updateVoucher(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Es necesario adjuntar un comprobante');
+    }
+
+    const voucherPath = await this.storageService.uploadFile(file, id, 'venezuela');
+    return this.transactionsService.updateVoucher(+id, voucherPath, user);
+  }
+
   /**
    * Rechaza una transferencia con motivo y comprobante opcional
    * El archivo se sube a Supabase Storage

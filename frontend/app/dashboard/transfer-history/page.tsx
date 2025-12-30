@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Alert from '@/components/ui/Alert';
@@ -19,6 +20,10 @@ export default function TransferHistoryPage() {
     const [endDate, setEndDate] = useState('');
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [isUpdateVoucherModalOpen, setIsUpdateVoucherModalOpen] = useState(false);
+    const [newVoucher, setNewVoucher] = useState<File | null>(null);
+    const [newVoucherPreview, setNewVoucherPreview] = useState<string>('');
+    const [processing, setProcessing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [alertState, setAlertState] = useState<{ isOpen: boolean; message: string; variant?: 'error' | 'success' | 'warning' | 'info' }>({
         isOpen: false,
@@ -58,6 +63,34 @@ export default function TransferHistoryPage() {
     const handleViewDetails = (transaction: Transaction) => {
         setSelectedTransaction(transaction);
         setIsDetailModalOpen(true);
+    };
+
+    const handleUpdateVoucher = async () => {
+        if (!selectedTransaction || !newVoucher) return;
+
+        setProcessing(true);
+        try {
+            await transactionsService.updateVoucher(selectedTransaction.id, newVoucher);
+            setAlertState({
+                isOpen: true,
+                message: 'Comprobante actualizado correctamente',
+                variant: 'success'
+            });
+            setIsUpdateVoucherModalOpen(false);
+            setNewVoucher(null);
+            setNewVoucherPreview('');
+            loadTransactions();
+            // Cerrar también el modal de detalles para refrescar
+            setIsDetailModalOpen(false);
+        } catch (error: any) {
+            setAlertState({
+                isOpen: true,
+                message: error.response?.data?.message || 'Error al actualizar el comprobante',
+                variant: 'error'
+            });
+        } finally {
+            setProcessing(false);
+        }
     };
 
     const handleCopyToClipboard = (transactionToCopy: Transaction) => {
@@ -540,8 +573,129 @@ export default function TransferHistoryPage() {
                                 <p className="text-sm text-yellow-900">{selectedTransaction.notes}</p>
                             </div>
                         )}
+
+                        {selectedTransaction.comprobanteVenezuela && (
+                            <div className="space-y-3">
+                                <h4 className="font-semibold text-gray-900">Comprobante Actual</h4>
+                                <div className="p-2 border border-blue-100 rounded-xl bg-blue-50">
+                                    {selectedTransaction.comprobanteVenezuela.endsWith('.pdf') ? (
+                                        <div className="flex items-center justify-between p-4">
+                                            <div className="flex items-center gap-3">
+                                                <svg className="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zM6 4v12h8V8h-3a1 1 0 01-1-1V4H6z" clipRule="evenodd" />
+                                                </svg>
+                                                <span className="text-sm font-medium text-gray-700">Comprobante PDF</span>
+                                            </div>
+                                            <a
+                                                href={selectedTransaction.comprobanteVenezuela}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-blue-600 hover:bg-gray-50 shadow-sm transition-all"
+                                            >
+                                                Ver PDF
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="relative group">
+                                            <img
+                                                src={selectedTransaction.comprobanteVenezuela}
+                                                alt="Comprobante"
+                                                className="w-full rounded-lg border border-gray-200 cursor-pointer hover:opacity-95 transition-all"
+                                                onClick={() => window.open(selectedTransaction.comprobanteVenezuela, '_blank')}
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/10 transition-opacity rounded-lg pointer-events-none">
+                                                <span className="px-3 py-1.5 bg-white/90 backdrop-blur rounded-full text-xs font-bold text-gray-800 shadow-xl">
+                                                    Click para ampliar
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Botón para cambiar comprobante (Solo Admin Venezuela y si está completado/rechazado) */}
+                        {(selectedTransaction.status === 'completado' || selectedTransaction.status === 'rechazado') && (
+                            <div className="pt-4 border-t border-gray-100 flex justify-center">
+                                <button
+                                    onClick={() => {
+                                        setNewVoucher(null);
+                                        setNewVoucherPreview('');
+                                        setIsUpdateVoucherModalOpen(true);
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl hover:bg-orange-100 transition-all font-medium"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    Me equivoqué de comprobante / Adjuntar nuevo
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
+            </Modal>
+
+            {/* update Voucher Modal */}
+            <Modal
+                isOpen={isUpdateVoucherModalOpen}
+                onClose={() => setIsUpdateVoucherModalOpen(false)}
+                title="Actualizar Comprobante"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        Selecciona el nuevo archivo para el comprobante de la transferencia #{selectedTransaction?.id}.
+                    </p>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nuevo Comprobante *
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    setNewVoucher(file);
+                                    if (file.type.startsWith('image/')) {
+                                        setNewVoucherPreview(URL.createObjectURL(file));
+                                    } else {
+                                        setNewVoucherPreview('');
+                                    }
+                                }
+                            }}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                        />
+                        {newVoucherPreview && (
+                            <div className="mt-3">
+                                <img src={newVoucherPreview} alt="Preview" className="max-h-48 rounded-lg border border-gray-200" />
+                            </div>
+                        )}
+                        {!newVoucherPreview && newVoucher && (
+                            <p className="mt-2 text-sm text-blue-600 font-medium"> Archivo seleccionado: {newVoucher.name}</p>
+                        )}
+                    </div>
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsUpdateVoucherModalOpen(false)}
+                            className="flex-1"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleUpdateVoucher}
+                            isLoading={processing}
+                            disabled={!newVoucher}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700"
+                        >
+                            Actualizar
+                        </Button>
+                    </div>
+                </div>
             </Modal>
 
             <Alert

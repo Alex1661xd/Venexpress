@@ -136,5 +136,11 @@ export class BeneficiariesService {
     const beneficiary = await this.findOne(id);
     await this.beneficiariesRepository.softRemove(beneficiary);
   }
+
+  async countByClient(clientId: number): Promise<number> {
+    return this.beneficiariesRepository.count({
+      where: { clientColombia: { id: clientId } }
+    });
+  }
 }
 

@@ -101,30 +101,66 @@ export default function ClientsPage() {
         setIsModalOpen(true);
     };
 
-    const handleDeleteClient = (client: Client) => {
-        setConfirmState({
-            isOpen: true,
-            message: `¿Estás seguro de que deseas eliminar al cliente ${client.name}? Esta acción no se puede deshacer de forma manual.`,
-            onConfirm: async () => {
-                try {
-                    await clientsService.deleteClient(client.id);
-                    setConfirmState(prev => ({ ...prev, isOpen: false }));
-                    setAlertState({
-                        isOpen: true,
-                        message: 'Cliente eliminado correctamente',
-                        variant: 'success'
-                    });
-                    loadClients();
-                } catch (error) {
-                    console.error('Error deleting client:', error);
-                    setAlertState({
-                        isOpen: true,
-                        message: 'Error al eliminar el cliente',
-                        variant: 'error'
-                    });
-                }
+    const handleDeleteClient = async (client: Client) => {
+        try {
+            const count = await clientsService.getBeneficiaryCount(client.id);
+
+            let message = `¿Estás seguro de que deseas eliminar al cliente ${client.name}? Esta acción no se puede deshacer de forma manual.`;
+
+            if (count > 0) {
+                message = `Este cliente tiene ${count} destinatario(s). Si lo eliminas, esos destinatarios quedarán sin uso a menos de que a cada uno le edites el cliente asociado a uno nuevo que crees. ¿Deseas continuar?`;
             }
-        });
+
+            setConfirmState({
+                isOpen: true,
+                message: message,
+                onConfirm: async () => {
+                    try {
+                        await clientsService.deleteClient(client.id);
+                        setConfirmState(prev => ({ ...prev, isOpen: false }));
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Cliente eliminado correctamente',
+                            variant: 'success'
+                        });
+                        loadClients();
+                    } catch (error) {
+                        console.error('Error deleting client:', error);
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Error al eliminar el cliente',
+                            variant: 'error'
+                        });
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error fetching beneficiary count:', error);
+            // Si hay error al contar, procedemos con el mensaje estándar por seguridad
+            setConfirmState({
+                isOpen: true,
+                message: `¿Estás seguro de que deseas eliminar al cliente ${client.name}? Esta acción no se puede deshacer de forma manual.`,
+                onConfirm: async () => {
+                    // ... mismo bloque de confirmación ...
+                    try {
+                        await clientsService.deleteClient(client.id);
+                        setConfirmState(prev => ({ ...prev, isOpen: false }));
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Cliente eliminado correctamente',
+                            variant: 'success'
+                        });
+                        loadClients();
+                    } catch (err) {
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Error al eliminar el cliente',
+                            variant: 'error'
+                        });
+                    }
+                }
+            });
+        }
     };
 
     const validateForm = (): boolean => {

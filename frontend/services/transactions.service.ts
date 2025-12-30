@@ -93,6 +93,15 @@ export const transactionsService = {
         return response.data;
     },
 
+    async updateVoucher(id: number, voucher: File): Promise<Transaction> {
+        const formData = new FormData();
+        formData.append('voucher', voucher);
+        const response = await api.post<Transaction>(`/transactions/${id}/update-voucher`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
     async getTransferHistory(status?: string, startDate?: string, endDate?: string): Promise<Transaction[]> {
         const response = await api.get<Transaction[]>('/transactions/history-admin', {
             params: { status, startDate, endDate },

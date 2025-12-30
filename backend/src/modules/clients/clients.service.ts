@@ -4,12 +4,14 @@ import { Repository, Like } from 'typeorm';
 import { Client } from './entities/client.entity';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { BeneficiariesService } from '../beneficiaries/beneficiaries.service';
 
 @Injectable()
 export class ClientsService {
   constructor(
     @InjectRepository(Client)
     private clientsRepository: Repository<Client>,
+    private beneficiariesService: BeneficiariesService,
   ) { }
 
   async create(createClientDto: CreateClientDto, vendedorId: number): Promise<Client> {
@@ -79,6 +81,10 @@ export class ClientsService {
   async remove(id: number): Promise<void> {
     const client = await this.findOne(id);
     await this.clientsRepository.softRemove(client);
+  }
+
+  async countBeneficiaries(id: number): Promise<number> {
+    return this.beneficiariesService.countByClient(id);
   }
 }
 

@@ -55,5 +55,11 @@ export class ClientsController {
   remove(@Param('id') id: string) {
     return this.clientsService.remove(+id);
   }
+
+  @Get(':id/beneficiaries/count')
+  @Roles(UserRole.VENDEDOR, UserRole.ADMIN_COLOMBIA)
+  countBeneficiaries(@Param('id') id: string) {
+    return this.clientsService.countBeneficiaries(+id);
+  }
 }
 

@@ -678,6 +678,40 @@ export class TransactionsService {
     return updated;
   }
 
+  async updateVoucher(id: number, voucherUrl: string, user: any): Promise<Transaction> {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transacción con ID ${id} no encontrada`);
+    }
+
+    if (
+      transaction.status !== TransactionStatus.COMPLETADO &&
+      transaction.status !== TransactionStatus.RECHAZADO
+    ) {
+      throw new BadRequestException(
+        'Solo se puede actualizar el comprobante en transacciones completadas o rechazadas',
+      );
+    }
+
+    const oldVoucher = transaction.comprobanteVenezuela;
+    transaction.comprobanteVenezuela = voucherUrl;
+
+    const updated = await this.transactionsRepository.save(transaction);
+
+    await this.createHistoryEntry(
+      id,
+      transaction.status,
+      `Comprobante actualizado por administrador Venezuela${oldVoucher ? ' (reemplazó anterior)' : ''}`,
+      user.id,
+    );
+
+    return updated;
+  }
+
+
   async rejectTransfer(id: number, reason: string, voucherUrl: string | null, user: any): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({
       where: { id },

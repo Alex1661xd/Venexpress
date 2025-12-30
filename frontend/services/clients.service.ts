@@ -26,4 +26,9 @@ export const clientsService = {
     async deleteClient(id: number): Promise<void> {
         await api.delete(`/clients/${id}`);
     },
+
+    async getBeneficiaryCount(id: number): Promise<number> {
+        const response = await api.get<number>(`/clients/${id}/beneficiaries/count`);
+        return response.data;
+    },
 };
