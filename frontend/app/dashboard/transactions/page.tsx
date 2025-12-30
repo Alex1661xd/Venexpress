@@ -242,6 +242,64 @@ export default function TransactionsPage() {
         }
     };
 
+    const handleCopyToClipboard = (transactionToCopy: Transaction) => {
+        const tx = transactionToCopy;
+        const isPagoMovil = tx.beneficiaryIsPagoMovil;
+
+        const formatCurr = (amount: number, currency: 'COP' | 'Bs') => {
+            if (currency === 'COP') {
+                return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+            }
+            return `${amount.toFixed(2)} Bs`;
+        };
+
+        const amountCOP = formatCurr(Number(tx.amountCOP), 'COP');
+        const amountBs = formatCurr(Number(tx.amountBs), 'Bs');
+        const rate = tx.saleRate != null && !isNaN(parseFloat(tx.saleRate.toString()))
+            ? parseFloat(tx.saleRate.toString()).toFixed(2)
+            : (tx.rateUsed != null ? Number(tx.rateUsed).toFixed(2) : '-');
+        const date = new Date(tx.createdAt).toLocaleString('es-CO');
+
+        let text = `*DATOS DE TRANSFERENCIA*\n\n`;
+        text += `Fecha: ${date}\n`;
+        text += `Beneficiario: ${tx.beneficiaryFullName}\n`;
+        text += `Cédula: ${tx.beneficiaryDocumentId}\n`;
+        text += `Banco: ${tx.beneficiaryBankName}\n`;
+
+        if (isPagoMovil) {
+            text += `Teléfono (Pago Móvil): ${tx.beneficiaryPhone}\n`;
+        } else {
+            text += `Cuenta: ${tx.beneficiaryAccountNumber}\n`;
+            if (tx.beneficiaryAccountType) {
+                text += `Tipo: ${tx.beneficiaryAccountType}\n`;
+            }
+            if (tx.beneficiaryPhone) {
+                text += `Teléfono: ${tx.beneficiaryPhone}\n`;
+            }
+        }
+
+        text += `\nTasa: ${rate}\n`;
+        text += `Monto COP: ${amountCOP}\n`;
+        text += `Monto Bs: ${amountBs}`;
+
+        navigator.clipboard.writeText(text).then(() => {
+            setAlertState({
+                isOpen: true,
+                message: 'Datos copiados al portapapeles',
+                variant: 'success'
+            });
+
+            setTimeout(() => setAlertState(prev => ({ ...prev, isOpen: false })), 2000);
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+            setAlertState({
+                isOpen: true,
+                message: 'Error al copiar datos',
+                variant: 'error'
+            });
+        });
+    };
+
     /**
      * Genera una imagen con el texto del comprobante incluido
      * Solución robusta que funciona en todos los dispositivos
@@ -769,6 +827,16 @@ export default function TransactionsPage() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                         </svg>
                                                     </button>
+                                                    <button
+                                                        onClick={() => handleCopyToClipboard(transaction)}
+                                                        className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 rounded-lg transition-colors"
+                                                        aria-label="Copiar datos"
+                                                        title="Copiar datos"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                        </svg>
+                                                    </button>
                                                     {canEdit(transaction) && !isAdminColombia && (
                                                         <>
                                                             <button
@@ -841,6 +909,16 @@ export default function TransactionsPage() {
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleCopyToClipboard(transaction)}
+                                                className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 rounded-lg transition-colors"
+                                                aria-label="Copiar datos"
+                                                title="Copiar datos"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                                 </svg>
                                             </button>
                                             {canEdit(transaction) && !isAdminColombia && (
@@ -991,14 +1069,25 @@ export default function TransactionsPage() {
 
                         {/* Beneficiary Info */}
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">Datos del Destinatario</h3>
-                                {selectedTransaction.beneficiaryIsPagoMovil && (
-                                    <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
-                                        📱 PAGO MÓVIL
-                                    </span>
-                                )}
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleCopyToClipboard(selectedTransaction)}
+                                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                    >
+                                        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                        </svg>
+                                        Copiar
+                                    </button>
+                                </div>
                             </div>
+                            {selectedTransaction.beneficiaryIsPagoMovil && (
+                                <span className="inline-block px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full mt-2">
+                                    📱 PAGO MÓVIL
+                                </span>
+                            )}
 
                             {selectedTransaction.beneficiaryIsPagoMovil ? (
                                 // Layout para Pago Móvil
