@@ -314,6 +314,10 @@ export default function NewTransactionPage() {
             ben.documentId.includes(beneficiarySearch)
         );
 
+    // Get selected beneficiary for preview
+    const selectedBen = beneficiaries.find(b => b.id.toString() === formData.beneficiaryId);
+
+
     return (
         <div className="p-4 sm:p-8">
             <div className="mb-8">
@@ -554,6 +558,46 @@ export default function NewTransactionPage() {
                                         <p className="mt-2 text-sm text-red-600">{errors.beneficiaryId}</p>
                                     )}
                                 </div>
+
+                                {/* Vista Previa Destinatario Seleccionado */}
+                                {selectedBen && (
+                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-blue-900 font-bold flex items-center gap-2">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Verificación de Seguridad
+                                            </h3>
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${selectedBen.isPagoMovil ? 'bg-blue-200 text-blue-800' : 'bg-indigo-200 text-indigo-800'}`}>
+                                                {selectedBen.isPagoMovil ? '📱 Pago Móvil' : '🏦 Transferencia'}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
+                                            <div>
+                                                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mb-0.5">Nombre del Destinatario</p>
+                                                <p className="text-gray-900 font-bold text-lg leading-tight">{selectedBen.fullName}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mb-0.5">Cédula / Rif</p>
+                                                <p className="text-gray-900 font-bold">{selectedBen.documentId}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mb-0.5">Banco de Destino</p>
+                                                <p className="text-gray-900 font-bold">{selectedBen.bankName}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mb-0.5">
+                                                    {selectedBen.isPagoMovil ? 'Teléfono Asociado' : 'Número de Cuenta'}
+                                                </p>
+                                                <p className="text-gray-900 font-mono font-bold tracking-wider">
+                                                    {selectedBen.isPagoMovil ? selectedBen.phone : selectedBen.accountNumber}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Step 1 Navigation */}
