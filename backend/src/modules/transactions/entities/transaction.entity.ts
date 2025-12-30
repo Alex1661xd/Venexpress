@@ -5,6 +5,7 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Client } from '../../clients/entities/client.entity';
@@ -65,6 +66,7 @@ export class Transaction {
   @Column({ name: 'is_purchase_rate_set', default: false })
   isPurchaseRateSet: boolean; // Indica si ya se estableció la tasa de compra
 
+  @Index()
   @Column({
     type: 'enum',
     enum: TransactionStatus,
@@ -84,6 +86,7 @@ export class Transaction {
   @Column('text', { nullable: true })
   rejectionReason: string; // Motivo del rechazo (separado de notes)
 
+  @Index()
   @Column({ type: 'boolean', default: false })
   isPaidByVendor: boolean;
 
@@ -91,12 +94,14 @@ export class Transaction {
   paidByVendorAt: Date;
 
   // Comisión (2% de la transferencia) pagada por Admin Colombia al vendedor
+  @Index()
   @Column({ type: 'boolean', default: false })
   isCommissionPaidToVendor: boolean;
 
   @Column({ type: 'timestamptz', nullable: true })
   commissionPaidAt: Date;
 
+  @Index()
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

@@ -5,6 +5,7 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { Client } from '../../clients/entities/client.entity';
 import { User } from '../../users/entities/user.entity';
@@ -17,6 +18,7 @@ export class Beneficiary {
   @Column()
   fullName: string;
 
+  @Index()
   @Column()
   documentId: string;
 
