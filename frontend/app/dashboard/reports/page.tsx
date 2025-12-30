@@ -53,16 +53,9 @@ export default function ReportsPage() {
     const { user } = useAuth();
     const [reportData, setReportData] = useState<ReportData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [startDate, setStartDate] = useState(() => getLocalDateString());
+    const [endDate, setEndDate] = useState(() => getLocalDateString());
     const [adminSummary, setAdminSummary] = useState<AdminColombiaFinancialSummary | null>(null);
-
-    useEffect(() => {
-        // Set default dates (today)
-        const todayStr = getLocalDateString();
-        setStartDate(todayStr);
-        setEndDate(todayStr);
-    }, []);
 
     useEffect(() => {
         if (startDate && endDate) {

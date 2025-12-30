@@ -9,9 +9,9 @@ export default function VenezuelaEarningsPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<any>(null);
-  const [startDate, setStartDate] = useState(getFirstDayOfMonth());
-  const [endDate, setEndDate] = useState(getLocalDateString());
-  const [showToday, setShowToday] = useState(false);
+  const [startDate, setStartDate] = useState(() => getLocalDateString());
+  const [endDate, setEndDate] = useState(() => getLocalDateString());
+  const [showToday, setShowToday] = useState(true);
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
 
   useEffect(() => {
@@ -40,8 +40,10 @@ export default function VenezuelaEarningsPage() {
   };
 
   const handleMonthFilter = () => {
-    setStartDate(getFirstDayOfMonth());
-    setEndDate(getLocalDateString());
+    const today = getLocalDateString();
+    const firstDay = getFirstDayOfMonth();
+    setStartDate(firstDay);
+    setEndDate(today);
     setShowToday(false);
   };
 
