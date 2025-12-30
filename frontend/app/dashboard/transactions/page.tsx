@@ -243,10 +243,6 @@ export default function TransactionsPage() {
     };
 
     /**
-     * Comparte la transacción usando el menú nativo del móvil (Web Share API)
-     * Funciona en Android/iOS y abre WhatsApp con texto + imagen
-     */
-    /**
      * Genera una imagen con el texto del comprobante incluido
      * Solución robusta que funciona en todos los dispositivos
      */
@@ -333,14 +329,14 @@ export default function TransactionsPage() {
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 32px Arial, sans-serif';
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Comprobante de Transferencia', canvas.width / 2, headerHeight / 2);
+            ctx.textBaseline = 'middle'; // Keep this for vertical alignment
+            ctx.fillText('Comprobante de Transferencia', canvas.width / 2, 50); // Changed Y coordinate as per instruction
 
             let currentY = headerHeight + padding;
 
             // Dibujar cada línea de texto
             ctx.textAlign = 'left';
-            ctx.textBaseline = 'alphabetic';
+            ctx.textBaseline = 'alphabetic'; // Keep this for text lines
 
             textoComprobante.forEach((linea, index) => {
                 if (linea === '') {
@@ -442,24 +438,31 @@ export default function TransactionsPage() {
                         });
                         return;
                     }
-                    // Si falla el share nativo, hacer fallback a descarga
+                    // If native share fails for other reasons, try fallback to download
                     throw error;
                 }
             } else {
-                throw new Error('Web Share API no soportada');
+                // Fallback: descargar la imagen
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `comprobante-${selectedTransaction.id}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                setAlertState({
+                    isOpen: true,
+                    message: 'Comprobante descargado. Compártelo desde tu galería.',
+                    variant: 'success'
+                });
             }
         } catch (error: any) {
-            console.error('Error al compartir/generar:', error);
-
-            // Fallback final: si falla share o generación, intentar descargar lo que se pueda si es un error de share
-            // Pero como estamos dentro del try general, es más seguro avisar y sugerir descarga manual si es posible.
-
-            // Si el error fue al compartir, quizás podamos descargar el blob? 
-            // El blob está en el scope del try...
-
+            console.error('Error al compartir:', error);
             setAlertState({
                 isOpen: true,
-                message: 'No se pudo abrir WhatsApp automáticamente. Intenta descargar la imagen.',
+                message: 'Error al generar el comprobante. Intenta nuevamente.',
                 variant: 'error'
             });
         }
