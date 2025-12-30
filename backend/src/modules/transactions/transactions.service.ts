@@ -1639,11 +1639,8 @@ export class TransactionsService {
 
     // Filtrar por fecha si se proporciona
     if (setPurchaseRateDto.date) {
-      // Si date es string, parsearlo correctamente; si es Date, usarlo directamente
-      const dateStr = typeof setPurchaseRateDto.date === 'string' 
-        ? setPurchaseRateDto.date 
-        : setPurchaseRateDto.date.toISOString().split('T')[0];
-      const startDate = parseLocalDate(dateStr);
+      // date es siempre string en formato YYYY-MM-DD según el DTO
+      const startDate = parseLocalDate(setPurchaseRateDto.date);
       startDate.setHours(0, 0, 0, 0);
 
       const endDate = new Date(startDate);
