@@ -28,7 +28,7 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
     const [confirmState, setConfirmState] = useState<{ isOpen: boolean; message: string; onConfirm: () => void }>({
         isOpen: false,
         message: '',
-        onConfirm: () => {}
+        onConfirm: () => { }
     });
 
     const [formData, setFormData] = useState({
@@ -158,7 +158,12 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
         const { name, value } = e.target;
         if (!transaction) return;
 
-        const rate = Number(transaction.rateUsed);
+        const rate = Number(transaction.saleRate || transaction.rateUsed || 0);
+
+        if (isNaN(rate) || rate === 0) {
+            console.error('Tasa inválida:', rate);
+            return;
+        }
 
         if (name === 'amountCOP') {
             const rawValue = value.replace(/\./g, '');
@@ -223,7 +228,7 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                             beneficiaryId: parseInt(formData.beneficiaryId),
                             notes: formData.notes,
                         });
-                        setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
+                        setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
                         router.push('/dashboard/transactions');
                     }
                 });
@@ -363,7 +368,11 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
 
                     <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
                         <p className="text-sm text-green-800">
-                            Tasa de cambio original: <span className="font-bold">{Number(transaction.rateUsed).toFixed(4)} Bs/COP</span>
+                            Tasa de cambio original: <span className="font-bold">
+                                {Number(transaction.saleRate || transaction.rateUsed || 0) > 0
+                                    ? Number(transaction.saleRate || transaction.rateUsed).toFixed(4)
+                                    : '-'} Bs/COP
+                            </span>
                         </p>
                         <p className="text-xs text-green-600 mt-1">
                             Esta es la tasa que se usó al crear la transacción
@@ -420,10 +429,10 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                 variant="warning"
                 onConfirm={confirmState.onConfirm}
                 onCancel={() => {
-                    setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
+                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
                     setSaving(false);
                 }}
             />
-        </div>
+        </div >
     );
 }

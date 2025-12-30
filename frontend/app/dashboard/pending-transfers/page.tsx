@@ -224,31 +224,38 @@ export default function PendingTransfersPage() {
         return `${amount.toFixed(2)} Bs`;
     };
 
-    const handleCopyToClipboard = () => {
-        if (!selectedTransaction) return;
+    const handleCopyToClipboard = (transactionToCopy?: any) => {
+        const tx = transactionToCopy && transactionToCopy.id ? transactionToCopy : selectedTransaction;
+        if (!tx) return;
 
-        const isPagoMovil = selectedTransaction.beneficiaryIsPagoMovil;
-        const amountCOP = formatCurrency(Number(selectedTransaction.amountCOP), 'COP');
-        const amountBs = formatCurrency(Number(selectedTransaction.amountBs), 'Bs');
+        const isPagoMovil = tx.beneficiaryIsPagoMovil;
+        const amountCOP = formatCurrency(Number(tx.amountCOP), 'COP');
+        const amountBs = formatCurrency(Number(tx.amountBs), 'Bs');
+        const rate = tx.saleRate != null && !isNaN(Number(tx.saleRate))
+            ? Number(tx.saleRate).toFixed(2)
+            : '-';
+        const date = new Date(tx.createdAt).toLocaleString('es-CO');
 
         let text = `*DATOS DE TRANSFERENCIA*\n\n`;
-        text += `Beneficiario: ${selectedTransaction.beneficiaryFullName}\n`;
-        text += `Cédula: ${selectedTransaction.beneficiaryDocumentId}\n`;
-        text += `Banco: ${selectedTransaction.beneficiaryBankName}\n`;
+        text += `Fecha: ${date}\n`;
+        text += `Beneficiario: ${tx.beneficiaryFullName}\n`;
+        text += `Cédula: ${tx.beneficiaryDocumentId}\n`;
+        text += `Banco: ${tx.beneficiaryBankName}\n`;
 
         if (isPagoMovil) {
-            text += `Teléfono (Pago Móvil): ${selectedTransaction.beneficiaryPhone}\n`;
+            text += `Teléfono (Pago Móvil): ${tx.beneficiaryPhone}\n`;
         } else {
-            text += `Cuenta: ${selectedTransaction.beneficiaryAccountNumber}\n`;
-            if (selectedTransaction.beneficiaryAccountType) {
-                text += `Tipo: ${selectedTransaction.beneficiaryAccountType}\n`;
+            text += `Cuenta: ${tx.beneficiaryAccountNumber}\n`;
+            if (tx.beneficiaryAccountType) {
+                text += `Tipo: ${tx.beneficiaryAccountType}\n`;
             }
-            if (selectedTransaction.beneficiaryPhone) {
-                text += `Teléfono: ${selectedTransaction.beneficiaryPhone}\n`;
+            if (tx.beneficiaryPhone) {
+                text += `Teléfono: ${tx.beneficiaryPhone}\n`;
             }
         }
 
-        text += `\nMonto COP: ${amountCOP}\n`;
+        text += `\nTasa: ${rate}\n`;
+        text += `Monto COP: ${amountCOP}\n`;
         text += `Monto Bs: ${amountBs}`;
 
         navigator.clipboard.writeText(text).then(() => {
@@ -341,7 +348,16 @@ export default function PendingTransfersPage() {
                     <>
                         <div className="space-y-4">
                             {transactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction) => (
-                                <div key={transaction.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                                <div key={transaction.id} className="relative border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                                    <button
+                                        onClick={() => handleCopyToClipboard(transaction)}
+                                        className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all z-10"
+                                        title="Copiar datos"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                        </svg>
+                                    </button>
                                     <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                                         {/* Transaction Info */}
                                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -417,7 +433,7 @@ export default function PendingTransfersPage() {
                                         <span className="text-gray-500">
                                             Tasa:{' '}
                                             <span className="text-gray-900 font-medium">
-                                                {transaction.saleRate != null
+                                                {transaction.saleRate != null && !isNaN(Number(transaction.saleRate))
                                                     ? Number(transaction.saleRate).toFixed(2)
                                                     : '-'}
                                             </span>
@@ -511,7 +527,7 @@ export default function PendingTransfersPage() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={handleCopyToClipboard}
+                                    onClick={() => handleCopyToClipboard(selectedTransaction)}
                                     className="text-blue-600 border-blue-200 hover:bg-blue-50 py-1"
                                     title="Copiar datos al portapapeles"
                                 >
@@ -584,7 +600,7 @@ export default function PendingTransfersPage() {
                             <div className="p-3 bg-gray-50 rounded-lg">
                                 <p className="text-xs text-gray-500 mb-1">Tasa Usada</p>
                                 <p className="font-semibold text-gray-900">
-                                    {selectedTransaction.saleRate != null
+                                    {selectedTransaction.saleRate != null && !isNaN(Number(selectedTransaction.saleRate))
                                         ? Number(selectedTransaction.saleRate).toFixed(2)
                                         : '-'}
                                 </p>

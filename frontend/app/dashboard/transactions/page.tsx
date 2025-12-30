@@ -274,7 +274,7 @@ export default function TransactionsPage() {
                 `Cuenta: ${selectedTransaction.beneficiaryAccountNumber || selectedTransaction.beneficiaryPhone || '-'}`,
                 `Monto: $${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`,
                 `Monto Bs: ${parseFloat(selectedTransaction.amountBs.toString()).toFixed(2)} Bs`,
-                `Tasa: ${selectedTransaction.saleRate ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/COP`,
+                `Tasa: ${selectedTransaction.saleRate != null && !isNaN(parseFloat(selectedTransaction.saleRate.toString())) ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/COP`,
                 `Fecha: ${new Date(selectedTransaction.createdAt).toLocaleString('es-CO', {
                     year: 'numeric',
                     month: '2-digit',
@@ -746,7 +746,7 @@ export default function TransactionsPage() {
                                                 {parseFloat(transaction.amountBs.toString()).toFixed(2)}
                                             </td>
                                             <td className="px-4 lg:px-6 py-4 text-center text-gray-600 text-sm">
-                                                {transaction.saleRate != null
+                                                {transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString()))
                                                     ? parseFloat(transaction.saleRate.toString()).toFixed(2)
                                                     : '-'}
                                             </td>
@@ -982,7 +982,7 @@ export default function TransactionsPage() {
                         <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
                             <p className="text-xs text-purple-600 font-medium mb-1">Tasa Aplicada</p>
                             <p className="text-xl font-bold text-purple-900">
-                                {selectedTransaction.saleRate != null
+                                {selectedTransaction.saleRate != null && !isNaN(parseFloat(selectedTransaction.saleRate.toString()))
                                     ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2)
                                     : '-'}{' '}
                                 Bs/COP

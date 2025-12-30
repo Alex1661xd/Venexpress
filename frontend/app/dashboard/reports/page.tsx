@@ -114,7 +114,8 @@ export default function ReportsPage() {
 
                 txs.forEach((t: any) => {
                     const fecha = new Date(t.createdAt).toLocaleDateString('es-CO');
-                    csv += `${fecha};${vendor};${t.beneficiaryFullName};${t.rateUsed};${t.amountCOP};${t.amountBs}\n`;
+                    const rate = t.saleRate || t.rateUsed || '-';
+                    csv += `${fecha};${vendor};${t.beneficiaryFullName};${rate};${t.amountCOP};${t.amountBs}\n`;
                     totalCOP += Number(t.amountCOP);
                     totalBs += Number(t.amountBs);
                 });
