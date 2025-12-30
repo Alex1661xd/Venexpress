@@ -224,6 +224,52 @@ export default function PendingTransfersPage() {
         return `${amount.toFixed(2)} Bs`;
     };
 
+    const handleCopyToClipboard = () => {
+        if (!selectedTransaction) return;
+
+        const isPagoMovil = selectedTransaction.beneficiaryIsPagoMovil;
+        const amountCOP = formatCurrency(Number(selectedTransaction.amountCOP), 'COP');
+        const amountBs = formatCurrency(Number(selectedTransaction.amountBs), 'Bs');
+
+        let text = `*DATOS DE TRANSFERENCIA*\n\n`;
+        text += `Beneficiario: ${selectedTransaction.beneficiaryFullName}\n`;
+        text += `Cédula: ${selectedTransaction.beneficiaryDocumentId}\n`;
+        text += `Banco: ${selectedTransaction.beneficiaryBankName}\n`;
+
+        if (isPagoMovil) {
+            text += `Teléfono (Pago Móvil): ${selectedTransaction.beneficiaryPhone}\n`;
+        } else {
+            text += `Cuenta: ${selectedTransaction.beneficiaryAccountNumber}\n`;
+            if (selectedTransaction.beneficiaryAccountType) {
+                text += `Tipo: ${selectedTransaction.beneficiaryAccountType}\n`;
+            }
+            if (selectedTransaction.beneficiaryPhone) {
+                text += `Teléfono: ${selectedTransaction.beneficiaryPhone}\n`;
+            }
+        }
+
+        text += `\nMonto COP: ${amountCOP}\n`;
+        text += `Monto Bs: ${amountBs}`;
+
+        navigator.clipboard.writeText(text).then(() => {
+            setAlertState({
+                isOpen: true,
+                message: 'Datos copiados al portapapeles',
+                variant: 'success'
+            });
+
+            // Auto hide alert
+            setTimeout(() => setAlertState(prev => ({ ...prev, isOpen: false })), 2000);
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+            setAlertState({
+                isOpen: true,
+                message: 'Error al copiar datos',
+                variant: 'error'
+            });
+        });
+    };
+
     if (user?.role !== 'admin_venezuela' && user?.role !== 'admin_colombia') {
         return (
             <div className="p-4 sm:p-8">
@@ -453,15 +499,29 @@ export default function PendingTransfersPage() {
 
                         {/* Beneficiary Details */}
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                                <h4 className="font-semibold text-gray-900">Datos del Destinatario</h4>
-                                {selectedTransaction.beneficiaryIsPagoMovil && (
-                                    <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
-                                        📱 PAGO MÓVIL
-                                    </span>
-                                )}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold text-gray-900">Datos del Destinatario</h4>
+                                    {selectedTransaction.beneficiaryIsPagoMovil && (
+                                        <span className="px-3 py-1 text-xs font-bold bg-blue-600 text-white rounded-full flex items-center gap-1">
+                                            📱 PAGO MÓVIL
+                                        </span>
+                                    )}
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleCopyToClipboard}
+                                    className="text-blue-600 border-blue-200 hover:bg-blue-50 py-1"
+                                    title="Copiar datos al portapapeles"
+                                >
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                    </svg>
+                                    Copiar
+                                </Button>
                             </div>
-                            
+
                             {selectedTransaction.beneficiaryIsPagoMovil ? (
                                 // Layout para Pago Móvil
                                 <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl space-y-3">
