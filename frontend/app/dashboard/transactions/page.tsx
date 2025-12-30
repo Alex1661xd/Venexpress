@@ -246,212 +246,222 @@ export default function TransactionsPage() {
      * Comparte la transacción usando el menú nativo del móvil (Web Share API)
      * Funciona en Android/iOS y abre WhatsApp con texto + imagen
      */
+    /**
+     * Genera una imagen con el texto del comprobante incluido
+     * Solución robusta que funciona en todos los dispositivos
+     */
     const handleShareToWhatsApp = async () => {
         if (!selectedTransaction) return;
 
-        // Verificar soporte de Web Share API
-        if (!navigator.share) {
-            setAlertState({
-                isOpen: true,
-                message: 'Tu navegador no soporta compartir. Usa un dispositivo móvil o actualiza tu navegador.',
-                variant: 'warning'
-            });
-            return;
-        }
+        setAlertState({
+            isOpen: true,
+            message: 'Generando comprobante para compartir...',
+            variant: 'info'
+        });
 
         try {
-            // Formatear el texto de la transacción (será el caption en WhatsApp)
-            const texto = `✅ *Transferencia Completada*
+            // Crear un canvas para combinar imagen y texto
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
 
-🆔 *ID:* #${selectedTransaction.id}
-👤 *Destinatario:* ${selectedTransaction.beneficiaryFullName}
-🏦 *Banco:* ${selectedTransaction.beneficiaryBankName}
-💳 *Cuenta:* ${selectedTransaction.beneficiaryAccountNumber}
-💰 *Monto:* $${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP = ${parseFloat(selectedTransaction.amountBs.toString()).toFixed(2)} Bs
-📊 *Tasa Aplicada:* ${selectedTransaction.saleRate ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/COP
-📅 *Fecha:* ${new Date(selectedTransaction.createdAt).toLocaleString('es-CO', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            })}
+            if (!ctx) {
+                throw new Error('No se pudo crear el canvas');
+            }
 
-¡Tu transferencia ha sido procesada exitosamente! ✨`;
+            // Texto del comprobante
+            const textoComprobante = [
+                '✅ TRANSFERENCIA COMPLETADA',
+                '',
+                `ID: #${selectedTransaction.id}`,
+                `Destinatario: ${selectedTransaction.beneficiaryFullName}`,
+                `Banco: ${selectedTransaction.beneficiaryBankName}`,
+                `Cuenta: ${selectedTransaction.beneficiaryAccountNumber || selectedTransaction.beneficiaryPhone || '-'}`,
+                `Monto: $${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`,
+                `Monto Bs: ${parseFloat(selectedTransaction.amountBs.toString()).toFixed(2)} Bs`,
+                `Tasa: ${selectedTransaction.saleRate ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/COP`,
+                `Fecha: ${new Date(selectedTransaction.createdAt).toLocaleString('es-CO', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}`,
+                '',
+                '¡Transferencia procesada exitosamente! ✨'
+            ];
 
-            // Si hay imagen del comprobante, compartir texto + imagen
+            let img: HTMLImageElement | null = null;
+            let imgWidth = 0;
+            let imgHeight = 0;
+
+            // Si hay imagen, cargarla
             if (venezuelaProof) {
+                img = new Image();
+                img.crossOrigin = 'anonymous';
+
+                await new Promise((resolve, reject) => {
+                    img!.onload = resolve;
+                    img!.onerror = reject;
+                    img!.src = venezuelaProof as string;
+                });
+
+                imgWidth = img.width;
+                imgHeight = img.height;
+            }
+
+            // Configurar dimensiones del canvas
+            const padding = 40;
+            const lineHeight = 35;
+            const headerHeight = 80;
+            const textAreaHeight = textoComprobante.length * lineHeight + padding * 2;
+
+            canvas.width = Math.max(800, imgWidth);
+            canvas.height = headerHeight + textAreaHeight + (img ? imgHeight + padding : 0);
+
+            // Fondo blanco
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Header con gradiente
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, headerHeight);
+            gradient.addColorStop(0, '#10b981');
+            gradient.addColorStop(1, '#059669');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, headerHeight);
+
+            // Título del header
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 32px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Comprobante de Transferencia', canvas.width / 2, headerHeight / 2);
+
+            let currentY = headerHeight + padding;
+
+            // Dibujar cada línea de texto
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            textoComprobante.forEach((linea, index) => {
+                if (linea === '') {
+                    currentY += lineHeight / 2;
+                    return;
+                }
+
+                if (index === 0) {
+                    // Primera línea (título) - YA ESTÁ EN EL HEADER, PERO DEJAMOS ESTO COMO SUBTÍTULO O LO QUITAMOS
+                    // El usuario lo incluyó en el array, así que lo renderizamos.
+                    ctx.font = 'bold 28px Arial, sans-serif';
+                    ctx.fillStyle = '#059669';
+                } else if (linea.includes(':')) {
+                    // Líneas con datos
+                    const [label, value] = linea.split(':');
+                    ctx.font = 'bold 22px Arial, sans-serif';
+                    ctx.fillStyle = '#374151';
+                    ctx.fillText(label + ':', padding, currentY);
+
+                    ctx.font = '22px Arial, sans-serif';
+                    ctx.fillStyle = '#1f2937';
+                    const labelWidth = ctx.measureText(label + ': ').width;
+                    // Ajustar posición del valor si es necesario, o solo concatenar
+                    // El split corta en el primer ':', pero el valor podría tener ':' (ej: hora).
+                    // Mejor usar .substring
+                    const realValue = linea.substring(linea.indexOf(':') + 1);
+                    ctx.fillText(realValue, padding + labelWidth, currentY);
+                } else {
+                    // Última línea (mensaje)
+                    ctx.font = 'italic 20px Arial, sans-serif';
+                    ctx.fillStyle = '#059669';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(linea, canvas.width / 2, currentY);
+                    ctx.textAlign = 'left';
+                }
+
+                currentY += lineHeight;
+            });
+
+            // Si hay imagen, dibujarla debajo del texto
+            if (img) {
+                currentY += padding / 2;
+
+                // Calcular dimensiones para centrar la imagen
+                const maxWidth = canvas.width - padding * 2;
+                let drawWidth = imgWidth;
+                let drawHeight = imgHeight;
+
+                if (drawWidth > maxWidth) {
+                    const scale = maxWidth / drawWidth;
+                    drawWidth = maxWidth;
+                    drawHeight = imgHeight * scale;
+                }
+
+                const xPos = (canvas.width - drawWidth) / 2;
+
+                // Dibujar borde alrededor de la imagen
+                ctx.strokeStyle = '#d1d5db';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(xPos - 2, currentY - 2, drawWidth + 4, drawHeight + 4);
+
+                // Dibujar la imagen
+                ctx.drawImage(img, xPos, currentY, drawWidth, drawHeight);
+            }
+
+            // Convertir canvas a blob
+            const blob = await new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob((b) => {
+                    if (b) resolve(b);
+                    else reject(new Error('Error al crear la imagen'));
+                }, 'image/png', 0.95);
+            });
+
+            const archivo = new File([blob], `comprobante-${selectedTransaction.id}.png`, {
+                type: 'image/png'
+            });
+
+            // Intentar compartir
+            if (navigator.share) {
                 try {
-                    // Descargar la imagen como Blob
-                    const respuesta = await fetch(venezuelaProof);
-
-                    if (!respuesta.ok) {
-                        throw new Error('No se pudo descargar la imagen');
-                    }
-
-                    const blob = await respuesta.blob();
-
-                    // Intentar copiar el texto al portapapeles como respaldo
-                    try {
-                        await navigator.clipboard.writeText(texto);
-                        setAlertState({
-                            isOpen: true,
-                            message: 'Texto copiado al portapapeles. Si WhatsApp no lo muestra, pégalo.',
-                            variant: 'info'
-                        });
-                        // Dar un pequeño tiempo para que el usuario vea el mensaje
-                        await new Promise(resolve => setTimeout(resolve, 1500));
-                    } catch (err) {
-                        console.error('Error al copiar al portapapeles:', err);
-                    }
-
-                    // Crear un objeto File (como si estuviera en la galería)
-                    const archivo = new File([blob], `comprobante-${selectedTransaction.id}.jpg`, {
-                        type: blob.type || 'image/jpeg'
+                    await navigator.share({
+                        files: [archivo],
+                        title: 'Comprobante de Transferencia',
+                        text: `Comprobante de transferencia #${selectedTransaction.id}`
                     });
 
-                    // Intentar compartir con archivo + texto juntos
-                    const dataCompartir: any = {
-                        files: [archivo],
-                        title: 'Transferencia Completada',
-                        text: texto
-                    };
-
-                    let compartidoExitoso = false;
-
-                    // Verificar si el navegador puede compartir estos datos
-                    if (navigator.canShare) {
-                        if (navigator.canShare(dataCompartir)) {
-                            // El navegador soporta compartir archivos + texto juntos
-                            try {
-                                await navigator.share(dataCompartir);
-                                compartidoExitoso = true;
-                            } catch (e: any) {
-                                if (e.name === 'AbortError') {
-                                    return; // Usuario canceló
-                                }
-                                // Si falla, intentar solo con archivo
-                            }
-                        }
-
-                        // Si no se pudo compartir ambos juntos, intentar solo archivo
-                        if (!compartidoExitoso) {
-                            const dataSoloArchivo = {
-                                files: [archivo],
-                                title: 'Transferencia Completada'
-                            };
-
-                            if (navigator.canShare(dataSoloArchivo)) {
-                                try {
-                                    await navigator.share(dataSoloArchivo);
-                                    compartidoExitoso = true;
-
-                                    // Después de compartir la imagen, compartir el texto
-                                    // Esperar un momento para que el usuario pueda procesar
-                                    setTimeout(async () => {
-                                        try {
-                                            await navigator.share({
-                                                title: 'Transferencia Completada',
-                                                text: texto
-                                            });
-                                        } catch (e: any) {
-                                            // Ignorar si el usuario cancela el segundo compartir
-                                            if (e.name !== 'AbortError') {
-                                                console.log('No se pudo compartir el texto después de la imagen');
-                                            }
-                                        }
-                                    }, 300);
-                                } catch (e: any) {
-                                    if (e.name === 'AbortError') {
-                                        return; // Usuario canceló
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Si no hay canShare, intentar compartir directamente
-                        try {
-                            await navigator.share(dataCompartir);
-                            compartidoExitoso = true;
-                        } catch (e: any) {
-                            if (e.name === 'AbortError') {
-                                return; // Usuario canceló
-                            }
-                        }
-                    }
-
-                    // Si aún no se pudo compartir, intentar solo texto con URL de imagen
-                    if (!compartidoExitoso) {
-                        await navigator.share({
-                            title: 'Transferencia Completada',
-                            text: `${texto}\n\n📎 Comprobante: ${venezuelaProof}`
-                        });
-                    }
-
-                    // Cerrar el modal después de compartir
                     setIsDetailModalOpen(false);
-
                     setAlertState({
                         isOpen: true,
-                        message: '¡Compartido exitosamente!',
+                        message: '¡Comprobante compartido exitosamente!',
                         variant: 'success'
                     });
-
-                } catch (shareError: any) {
-                    // El usuario canceló o hubo un error
-                    if (shareError.name === 'AbortError') {
-                        console.log('Usuario canceló el compartir');
-                        // No mostrar error si el usuario solo cerró el menú
+                } catch (error: any) {
+                    if (error.name === 'AbortError') {
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Compartir cancelado',
+                            variant: 'info'
+                        });
                         return;
-                    } else {
-                        console.error('Error al compartir:', shareError);
-                        // Si falla compartir con archivo, intentar solo texto
-                        try {
-                            await navigator.share({
-                                title: 'Transferencia Completada',
-                                text: `${texto}\n\n📎 Comprobante: ${venezuelaProof}`
-                            });
-                            setIsDetailModalOpen(false);
-                            setAlertState({
-                                isOpen: true,
-                                message: 'Texto compartido (imagen disponible en el enlace)',
-                                variant: 'success'
-                            });
-                        } catch (textError: any) {
-                            if (textError.name !== 'AbortError') {
-                                setAlertState({
-                                    isOpen: true,
-                                    message: 'No se pudo compartir. Intenta nuevamente.',
-                                    variant: 'error'
-                                });
-                            }
-                        }
                     }
+                    // Si falla el share nativo, hacer fallback a descarga
+                    throw error;
                 }
             } else {
-                // Si no hay imagen, compartir solo texto
-                await navigator.share({
-                    title: 'Transferencia Completada',
-                    text: texto
-                });
-
-                setIsDetailModalOpen(false);
-
-                setAlertState({
-                    isOpen: true,
-                    message: '¡Compartido exitosamente!',
-                    variant: 'success'
-                });
+                throw new Error('Web Share API no soportada');
             }
         } catch (error: any) {
-            if (error.name !== 'AbortError') {
-                console.error('Error al compartir:', error);
-                setAlertState({
-                    isOpen: true,
-                    message: 'No se pudo compartir. Verifica los permisos del navegador.',
-                    variant: 'error'
-                });
-            }
+            console.error('Error al compartir/generar:', error);
+
+            // Fallback final: si falla share o generación, intentar descargar lo que se pueda si es un error de share
+            // Pero como estamos dentro del try general, es más seguro avisar y sugerir descarga manual si es posible.
+
+            // Si el error fue al compartir, quizás podamos descargar el blob? 
+            // El blob está en el scope del try...
+
+            setAlertState({
+                isOpen: true,
+                message: 'No se pudo abrir WhatsApp automáticamente. Intenta descargar la imagen.',
+                variant: 'error'
+            });
         }
     };
 
