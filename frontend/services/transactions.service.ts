@@ -205,6 +205,11 @@ export const transactionsService = {
         return response.data;
     },
 
+    async getMonthlyStats(): Promise<any[]> {
+        const response = await api.get('/transactions/stats/monthly');
+        return response.data;
+    },
+
     /**
      * Obtiene URLs firmadas para los comprobantes de una transacción
      */

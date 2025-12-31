@@ -5,6 +5,17 @@ import { useAuth } from '@/hooks/useAuth';
 import Card from '@/components/ui/Card';
 import { transactionsService } from '@/services/transactions.service';
 import { getLocalDateString, getDateDaysAgo, getFirstDayOfMonth } from '@/utils/date';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Legend,
+    Cell
+} from 'recharts';
 
 interface ReportData {
     summary: {
@@ -49,6 +60,14 @@ interface AdminColombiaFinancialSummary {
     dateRange: { from: string; to: string };
 }
 
+interface MonthlyStats {
+    name: string;
+    amountCOP: number;
+    amountBs: number;
+    earnings: number;
+    count: number;
+}
+
 export default function ReportsPage() {
     const { user, loading: authLoading } = useAuth();
     const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -56,12 +75,32 @@ export default function ReportsPage() {
     const [startDate, setStartDate] = useState(() => getLocalDateString());
     const [endDate, setEndDate] = useState(() => getLocalDateString());
     const [adminSummary, setAdminSummary] = useState<AdminColombiaFinancialSummary | null>(null);
+    const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
+    const [loadingMonthly, setLoadingMonthly] = useState(true);
 
     useEffect(() => {
         if (!authLoading && user && startDate && endDate) {
             loadReports();
         }
     }, [startDate, endDate, user, authLoading]);
+
+    useEffect(() => {
+        if (!authLoading && user) {
+            loadMonthlyStats();
+        }
+    }, [user, authLoading]);
+
+    const loadMonthlyStats = async () => {
+        try {
+            setLoadingMonthly(true);
+            const stats = await transactionsService.getMonthlyStats();
+            setMonthlyStats(stats);
+        } catch (error) {
+            console.error('Error loading monthly stats:', error);
+        } finally {
+            setLoadingMonthly(false);
+        }
+    };
 
     const loadReports = async () => {
         try {
@@ -168,6 +207,114 @@ export default function ReportsPage() {
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">Reportes y Estadísticas</h1>
                 <p className="text-gray-600">Visualiza métricas y rendimiento del sistema.</p>
             </div>
+
+            {/* Monthly Performance Chart - Independent of daily filters */}
+            <Card className="p-6 overflow-hidden">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900">Rendimiento Mensual {new Date().getFullYear()}</h3>
+                        <p className="text-sm text-gray-500">Cifras globales acumuladas por mes</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                            <span className="text-xs font-medium text-gray-600">Pesos (COP)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                            <span className="text-xs font-medium text-gray-600">Bolívares (Bs)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                            <span className="text-xs font-medium text-gray-600">Ganancias</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="h-[400px] w-full mt-4">
+                    {loadingMonthly ? (
+                        <div className="h-full w-full flex items-center justify-center bg-gray-50/50 rounded-xl">
+                            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-600"></div>
+                        </div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                data={monthlyStats}
+                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                barGap={8}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#6B7280', fontSize: 12 }}
+                                    tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(1)}M` : value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#F3F4F6', radius: 8 }}
+                                    content={({ active, payload, label }) => {
+                                        if (active && payload && payload.length) {
+                                            const data = payload[0].payload;
+                                            return (
+                                                <div className="bg-white p-4 rounded-xl shadow-2xl border border-gray-100 min-w-[220px]">
+                                                    <p className="text-sm font-bold text-gray-900 mb-3 border-b pb-2">{label} {new Date().getFullYear()}</p>
+                                                    <div className="space-y-2.5">
+                                                        <div className="flex justify-between items-center text-sm">
+                                                            <span className="text-gray-500">Volumen COP:</span>
+                                                            <span className="font-bold text-blue-600">{formatCurrency(data.amountCOP, 'COP')}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm">
+                                                            <span className="text-gray-500">Monto Bs:</span>
+                                                            <span className="font-bold text-emerald-600">{formatCurrency(data.amountBs, 'Bs')}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm">
+                                                            <span className="text-gray-500">Ganancia Admin:</span>
+                                                            <span className="font-bold text-amber-600">{formatCurrency(data.earnings, 'COP')}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-sm pt-1 border-t">
+                                                            <span className="text-gray-500">Transacciones:</span>
+                                                            <span className="font-bold text-gray-900">{data.count}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Bar
+                                    dataKey="amountCOP"
+                                    fill="#3B82F6"
+                                    radius={[4, 4, 0, 0]}
+                                    maxBarSize={40}
+                                    animationDuration={1500}
+                                />
+                                <Bar
+                                    dataKey="amountBs"
+                                    fill="#10B981"
+                                    radius={[4, 4, 0, 0]}
+                                    maxBarSize={40}
+                                    animationDuration={1500}
+                                />
+                                <Bar
+                                    dataKey="earnings"
+                                    fill="#F59E0B"
+                                    radius={[4, 4, 0, 0]}
+                                    maxBarSize={40}
+                                    animationDuration={1500}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    )}
+                </div>
+            </Card>
 
             {/* Date Filter */}
             <Card className="p-3 sm:p-6">

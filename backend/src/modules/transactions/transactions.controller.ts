@@ -49,6 +49,12 @@ export class TransactionsController {
     return this.transactionsService.findAll(user, paginationDto);
   }
 
+  @Get('stats/monthly')
+  @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA)
+  getMonthlyStats(@CurrentUser() user: any) {
+    return this.transactionsService.getMonthlyStats(user);
+  }
+
   @Get('debt')
   @Roles(UserRole.VENDEDOR)
   getDebt(@CurrentUser() user: any, @Query() query: any) {

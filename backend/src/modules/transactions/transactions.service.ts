@@ -1637,6 +1637,60 @@ export class TransactionsService {
   }
 
   /**
+   * Obtiene estadísticas mensuales del año actual para gráficos de largo plazo
+   */
+  async getMonthlyStats(user: any): Promise<any[]> {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const dateFrom = new Date(currentYear, 0, 1);
+    const dateTo = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+
+    const transactions = await this.transactionsRepository.find({
+      where: {
+        createdAt: Between(dateFrom, dateTo),
+        status: TransactionStatus.COMPLETADO,
+      },
+      order: { createdAt: 'ASC' },
+    });
+
+    const months = [
+      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
+    ];
+
+    const stats = months.map((month, index) => ({
+      name: month,
+      monthIndex: index,
+      amountCOP: 0,
+      amountBs: 0,
+      earnings: 0,
+      count: 0
+    }));
+
+    transactions.forEach(tx => {
+      const txDate = new Date(tx.createdAt);
+      const txMonth = txDate.getMonth();
+      const cop = Number(tx.amountCOP) || 0;
+      const bs = Number(tx.amountBs) || 0;
+      const purchaseRate = Number(tx.purchaseRate) || 0;
+
+      stats[txMonth].count++;
+      stats[txMonth].amountCOP += cop;
+      stats[txMonth].amountBs += bs;
+
+      // Ganancia para el administrador correspondiente (estimada si hay tasa de compra)
+      if (tx.isPurchaseRateSet && purchaseRate > 0) {
+        const inversion = bs * purchaseRate;
+        const gananciaSistema = cop - inversion;
+        // Se asume 50% para cada admin como en otros cálculos
+        stats[txMonth].earnings += (gananciaSistema / 2);
+      }
+    });
+
+    return stats;
+  }
+
+  /**
    * Establece la tasa de compra para una transacción específica
    */
   async setPurchaseRate(
