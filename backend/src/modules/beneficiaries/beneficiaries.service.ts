@@ -60,7 +60,7 @@ export class BeneficiariesService {
     }
   }
 
-  async findAll(user: any, search?: string): Promise<Beneficiary[]> {
+  async findAll(user: any, search?: string, vendorId?: number): Promise<Beneficiary[]> {
     const where: any = {};
 
     // Filtrar según el rol
@@ -71,13 +71,18 @@ export class BeneficiariesService {
       where.clientColombia = { vendedor: { id: user.id } };
     }
 
+    // Filtro opcional por vendedor (para administradores)
+    if (vendorId) {
+      where.clientColombia = { ...where.clientColombia, vendedor: { id: vendorId } };
+    }
+
     if (search) {
       where.fullName = Like(`%${search}%`);
     }
 
     return this.beneficiariesRepository.find({
       where,
-      relations: ['clientColombia', 'userApp'],
+      relations: ['clientColombia', 'clientColombia.vendedor', 'userApp'],
       order: { createdAt: 'DESC' },
     });
   }

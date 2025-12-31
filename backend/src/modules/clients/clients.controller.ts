@@ -33,10 +33,11 @@ export class ClientsController {
   @Roles(UserRole.VENDEDOR, UserRole.ADMIN_COLOMBIA)
   findAll(
     @Query('search') search?: string,
+    @Query('vendorId') vendorId?: number,
     @CurrentUser('id') userId?: number,
     @CurrentUser('role') userRole?: string,
   ) {
-    return this.clientsService.findAll(search, userId, userRole);
+    return this.clientsService.findAll(search, userId, userRole, vendorId);
   }
 
   @Get(':id')

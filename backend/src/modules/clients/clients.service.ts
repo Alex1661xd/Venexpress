@@ -31,13 +31,16 @@ export class ClientsService {
     return this.clientsRepository.save(client);
   }
 
-  async findAll(search?: string, userId?: number, userRole?: string): Promise<Client[]> {
+  async findAll(search?: string, userId?: number, userRole?: string, vendorId?: number): Promise<Client[]> {
     // Construir condiciones de búsqueda
     const whereConditions: any = {};
 
     // Si es vendedor, solo ver sus propios clientes
     if (userRole === 'vendedor') {
       whereConditions.vendedor = { id: userId };
+    } else if (vendorId) {
+      // Si se proporciona un vendorId (por ejemplo, por un admin), filtrar por ese vendedor
+      whereConditions.vendedor = { id: vendorId };
     }
 
     // Agregar búsqueda si existe

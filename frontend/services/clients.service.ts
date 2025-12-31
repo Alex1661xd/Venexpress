@@ -2,8 +2,10 @@ import api from './api';
 import { Client, CreateClientDto, UpdateClientDto } from '@/types/client';
 
 export const clientsService = {
-    async getClients(search?: string): Promise<Client[]> {
-        const params = search ? { search } : {};
+    async getClients(search?: string, vendorId?: number): Promise<Client[]> {
+        const params: any = {};
+        if (search) params.search = search;
+        if (vendorId) params.vendorId = vendorId;
         const response = await api.get<Client[]>('/clients', { params });
         return response.data;
     },

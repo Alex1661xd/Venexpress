@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import SearchBar from '@/components/ui/SearchBar';
@@ -9,12 +9,18 @@ import Input from '@/components/ui/Input';
 import Alert from '@/components/ui/Alert';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { clientsService } from '@/services/clients.service';
+import { usersService, Vendor } from '@/services/users.service';
+import { useAuth } from '@/hooks/useAuth';
 import { Client, CreateClientDto } from '@/types/client';
 
 export default function ClientsPage() {
+    const { user } = useAuth();
+    const isAdminColombia = user?.role === 'admin_colombia';
     const [clients, setClients] = useState<Client[]>([]);
     const [filteredClients, setFilteredClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [selectedVendorId, setSelectedVendorId] = useState<string>('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<Client | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,13 +48,28 @@ export default function ClientsPage() {
 
     useEffect(() => {
         loadClients();
-    }, []);
+        if (isAdminColombia) {
+            loadVendors();
+        }
+    }, [isAdminColombia, selectedVendorId]);
+
+    const loadVendors = async () => {
+        try {
+            const data = await usersService.getVendors();
+            setVendors(data);
+        } catch (error) {
+            console.error('Error loading vendors:', error);
+        }
+    };
 
     const loadClients = async () => {
         try {
-            const data = await clientsService.getClients();
+            setLoading(true);
+            const vendorId = selectedVendorId === 'all' ? undefined : Number(selectedVendorId);
+            const data = await clientsService.getClients(undefined, vendorId);
             setClients(data);
             setFilteredClients(data);
+            setCurrentPage(1); // Reset to first page when data changes
         } catch (error) {
             console.error('Error loading clients:', error);
         } finally {
@@ -56,7 +77,7 @@ export default function ClientsPage() {
         }
     };
 
-    const handleSearch = (query: string) => {
+    const handleSearch = useCallback((query: string) => {
         setSearchQuery(query);
         setCurrentPage(1); // Reset to first page on search
         if (!query.trim()) {
@@ -70,7 +91,7 @@ export default function ClientsPage() {
             (client.documentId && client.documentId.includes(query))
         );
         setFilteredClients(filtered);
-    };
+    }, [clients]);
 
     const handleViewDetails = (client: Client) => {
         setSelectedClient(client);
@@ -230,6 +251,22 @@ export default function ClientsPage() {
                         onSearch={handleSearch}
                     />
                 </div>
+                {isAdminColombia && (
+                    <div className="w-full sm:w-64">
+                        <select
+                            value={selectedVendorId}
+                            onChange={(e) => setSelectedVendorId(e.target.value)}
+                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white font-medium"
+                        >
+                            <option value="all">Todos los vendedores</option>
+                            {vendors.map(vendor => (
+                                <option key={vendor.id} value={vendor.id}>
+                                    {vendor.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
                 <Button onClick={openCreateModal}>
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -280,6 +317,11 @@ export default function ClientsPage() {
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
                                             Fecha Registro
                                         </th>
+                                        {isAdminColombia && (
+                                            <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
+                                                Vendedor
+                                            </th>
+                                        )}
                                         <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
                                             Acciones
                                         </th>
@@ -305,6 +347,11 @@ export default function ClientsPage() {
                                             <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-gray-600 text-xs md:text-sm">
                                                 {new Date(client.createdAt).toLocaleDateString('es-CO')}
                                             </td>
+                                            {isAdminColombia && (
+                                                <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-gray-600 text-sm">
+                                                    {client.vendedor?.name || '-'}
+                                                </td>
+                                            )}
                                             <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-xs md:text-sm font-medium">
                                                 <div className="flex gap-2 justify-end">
                                                     <button
@@ -347,6 +394,11 @@ export default function ClientsPage() {
                                         </div>
                                         <div className="text-sm text-gray-600">{new Date(client.createdAt).toLocaleDateString('es-CO')}</div>
                                     </div>
+                                    {isAdminColombia && (
+                                        <div className="mt-2 text-xs text-gray-500 italic">
+                                            Vendedor: {client.vendedor?.name || '-'}
+                                        </div>
+                                    )}
                                     <div className="mt-3 flex items-center justify-end gap-3">
                                         <button onClick={() => handleViewDetails(client)} className="text-purple-600 hover:text-purple-900">Ver detalles</button>
                                         <button onClick={() => openEditModal(client)} className="text-blue-600 hover:text-blue-900">Editar</button>

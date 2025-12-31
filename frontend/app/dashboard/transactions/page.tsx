@@ -774,6 +774,7 @@ export default function TransactionsPage() {
                                 <thead className="bg-gray-50 border-b-2 border-gray-200">
                                     <tr>
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">ID</th>
+                                        <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Vendedor</th>
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Destinatario</th>
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Banco</th>
                                         <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Monto COP</th>
@@ -788,6 +789,7 @@ export default function TransactionsPage() {
                                     {currentTransactions.map((transaction) => (
                                         <tr key={transaction.id} className="hover:bg-gray-50">
                                             <td className="px-4 lg:px-6 py-4 text-gray-900 font-medium text-sm">#{transaction.id}</td>
+                                            <td className="px-4 lg:px-6 py-4 text-gray-600 font-medium text-sm">{transaction.createdBy?.name || 'Sistema'}</td>
                                             <td className="px-4 lg:px-6 py-4">
                                                 <div className="font-medium text-gray-900 text-sm">{transaction.beneficiaryFullName}</div>
                                                 <div className="text-xs text-gray-500">
@@ -890,6 +892,7 @@ export default function TransactionsPage() {
                                             <div className="text-sm text-gray-500">#{transaction.id} · {new Date(transaction.createdAt).toLocaleDateString('es-CO')}</div>
                                             <div className="font-medium text-gray-900 truncate">{transaction.beneficiaryFullName}</div>
                                             <div className="text-sm text-gray-600 truncate">{transaction.beneficiaryBankName}</div>
+                                            <div className="text-xs text-gray-500 mt-1">Vendedor: {transaction.createdBy?.name || 'Sistema'}</div>
                                         </div>
                                         <div className="text-right flex-shrink-0">
                                             <div className="text-lg font-bold text-gray-900">{parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</div>
@@ -1144,6 +1147,16 @@ export default function TransactionsPage() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Vendor Info */}
+                        <div className="space-y-3">
+                            <h3 className="text-lg font-semibold text-gray-900">Vendedor</h3>
+                            <div className="p-4 bg-gray-50 rounded-xl">
+                                <p className="font-medium text-gray-900">
+                                    {selectedTransaction.createdBy?.name || 'Sistema'}
+                                </p>
+                            </div>
                         </div>
 
                         {/* Client Info */}

@@ -29,8 +29,12 @@ export class BeneficiariesController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: any, @Query('search') search?: string) {
-    return this.beneficiariesService.findAll(user, search);
+  findAll(
+    @CurrentUser() user: any,
+    @Query('search') search?: string,
+    @Query('vendorId') vendorId?: number,
+  ) {
+    return this.beneficiariesService.findAll(user, search, vendorId);
   }
 
   @Get(':id')

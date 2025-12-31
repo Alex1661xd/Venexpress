@@ -50,7 +50,7 @@ interface AdminColombiaFinancialSummary {
 }
 
 export default function ReportsPage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [reportData, setReportData] = useState<ReportData | null>(null);
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(() => getLocalDateString());
@@ -58,10 +58,10 @@ export default function ReportsPage() {
     const [adminSummary, setAdminSummary] = useState<AdminColombiaFinancialSummary | null>(null);
 
     useEffect(() => {
-        if (startDate && endDate) {
+        if (!authLoading && user && startDate && endDate) {
             loadReports();
         }
-    }, [startDate, endDate]);
+    }, [startDate, endDate, user, authLoading]);
 
     const loadReports = async () => {
         try {
@@ -215,26 +215,29 @@ export default function ReportsPage() {
                         <>
                             {/* Resumen financiero Admin Colombia */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                                <Card>
-                                    <p className="text-sm text-gray-500">Comisión total a vendedores (2%)</p>
-                                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                                <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white border-none">
+                                    <p className="text-amber-100 text-sm font-medium">Comisión total a vendedores (2%)</p>
+                                    <p className="text-2xl font-bold mt-1">
                                         {formatCurrency(adminSummary.global.totalCommission, 'COP')}
                                     </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Pagada: {formatCurrency(adminSummary.global.commissionPaid, 'COP')} · Pendiente: {formatCurrency(adminSummary.global.commissionPending, 'COP')}
-                                    </p>
+                                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-white/20 text-xs text-amber-50 font-medium">
+                                        <span>Pagada: {formatCurrency(adminSummary.global.commissionPaid, 'COP')}</span>
+                                        <span className="bg-white/20 px-1.5 py-0.5 rounded">Pendiente: {formatCurrency(adminSummary.global.commissionPending, 'COP')}</span>
+                                    </div>
                                 </Card>
-                                <Card>
-                                    <p className="text-sm text-gray-500">Ganancia Admin Colombia</p>
-                                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                                <Card className="bg-gradient-to-br from-teal-500 to-emerald-600 text-white border-none">
+                                    <p className="text-teal-100 text-sm font-medium">Ganancia Admin Colombia</p>
+                                    <p className="text-2xl font-bold mt-1">
                                         {formatCurrency(adminSummary.global.adminColombiaEarnings, 'COP')}
                                     </p>
+                                    <p className="text-xs text-teal-50 mt-2 italic">* Calculado post-comisión</p>
                                 </Card>
-                                <Card>
-                                    <p className="text-sm text-gray-500">Deuda con Admin Venezuela</p>
-                                    <p className="text-2xl font-bold text-gray-900 mt-1">
+                                <Card className="bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-none">
+                                    <p className="text-indigo-100 text-sm font-medium">Deuda con Admin Venezuela</p>
+                                    <p className="text-2xl font-bold mt-1">
                                         {formatCurrency(adminSummary.global.amountOwedToVenezuela, 'COP')}
                                     </p>
+                                    <p className="text-xs text-indigo-50 mt-2">Monto neto a transferir</p>
                                 </Card>
                             </div>
 
@@ -384,8 +387,8 @@ export default function ReportsPage() {
                         </Card>
                     </div>
 
-                    {/* Chart - Simple Bar Chart - Solo mostrar si el rango es mayor a 1 día */}
-                    {reportData.chartData.length > 1 && startDate !== endDate && (
+                    {/* Chart - Simple Bar Chart */}
+                    {reportData.chartData.length > 0 && (
                         <Card>
                             <h3 className="text-lg font-semibold text-gray-900 mb-6">Transacciones por Día</h3>
                             <div className="space-y-4">
@@ -414,8 +417,8 @@ export default function ReportsPage() {
                         </Card>
                     )}
 
-                    {/* Daily Details Table - Solo mostrar si el rango es mayor a 1 día */}
-                    {reportData.chartData.length > 1 && startDate !== endDate && (
+                    {/* Daily Details Table */}
+                    {reportData.chartData.length > 0 && (
                         <Card>
                             <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalle por Día</h3>
                             <div className="overflow-x-auto">

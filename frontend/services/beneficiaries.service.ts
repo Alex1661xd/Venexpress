@@ -2,8 +2,10 @@ import api from './api';
 import { Beneficiary, CreateBeneficiaryDto, UpdateBeneficiaryDto } from '@/types/beneficiary';
 
 export const beneficiariesService = {
-    async getBeneficiaries(search?: string): Promise<Beneficiary[]> {
-        const params = search ? { search } : {};
+    async getBeneficiaries(search?: string, vendorId?: number): Promise<Beneficiary[]> {
+        const params: any = {};
+        if (search) params.search = search;
+        if (vendorId) params.vendorId = vendorId;
         const response = await api.get<Beneficiary[]>('/beneficiaries', { params });
         return response.data;
     },

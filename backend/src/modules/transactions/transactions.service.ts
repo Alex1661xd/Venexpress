@@ -1494,10 +1494,7 @@ export class TransactionsService {
     const queryBuilder = this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
-      .where('transaction.createdAt >= :dateFrom AND transaction.createdAt <= :dateTo', {
-        dateFrom,
-        dateTo
-      });
+      .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
     // Filter by vendor if provided
     if (vendorId) {

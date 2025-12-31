@@ -10,6 +10,10 @@ export interface Beneficiary {
     clientColombia?: {
         id: number;
         name: string;
+        vendedor?: {
+            id: number;
+            name: string;
+        };
     };
     userApp?: {
         id: number;

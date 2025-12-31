@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import SearchBar from '@/components/ui/SearchBar';
@@ -10,6 +10,8 @@ import Alert from '@/components/ui/Alert';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { beneficiariesService } from '@/services/beneficiaries.service';
 import { clientsService } from '@/services/clients.service';
+import { usersService, Vendor } from '@/services/users.service';
+import { useAuth } from '@/hooks/useAuth';
 import { Beneficiary } from '@/types/beneficiary';
 import { Client } from '@/types/client';
 
@@ -31,10 +33,14 @@ const VENEZUELAN_BANKS = [
 ];
 
 export default function BeneficiariesPage() {
+    const { user } = useAuth();
+    const isAdminColombia = user?.role === 'admin_colombia';
     const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
     const [filteredBeneficiaries, setFilteredBeneficiaries] = useState<Beneficiary[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
+    const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [selectedVendorId, setSelectedVendorId] = useState<string>('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingBeneficiary, setEditingBeneficiary] = useState<Beneficiary | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -68,17 +74,32 @@ export default function BeneficiariesPage() {
 
     useEffect(() => {
         loadData();
-    }, []);
+        if (isAdminColombia) {
+            loadVendors();
+        }
+    }, [isAdminColombia, selectedVendorId]);
+
+    const loadVendors = async () => {
+        try {
+            const data = await usersService.getVendors();
+            setVendors(data);
+        } catch (error) {
+            console.error('Error loading vendors:', error);
+        }
+    };
 
     const loadData = async () => {
         try {
+            setLoading(true);
+            const vendorId = selectedVendorId === 'all' ? undefined : Number(selectedVendorId);
             const [beneficiariesData, clientsData] = await Promise.all([
-                beneficiariesService.getBeneficiaries(),
-                clientsService.getClients(),
+                beneficiariesService.getBeneficiaries(undefined, vendorId),
+                clientsService.getClients(undefined, vendorId),
             ]);
             setBeneficiaries(beneficiariesData);
             setFilteredBeneficiaries(beneficiariesData);
             setClients(clientsData);
+            setCurrentPage(1); // Reset to first page when data changes
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -86,7 +107,7 @@ export default function BeneficiariesPage() {
         }
     };
 
-    const handleSearch = (query: string) => {
+    const handleSearch = useCallback((query: string) => {
         setSearchQuery(query);
         setCurrentPage(1); // Reset to first page on search
         if (!query.trim()) {
@@ -102,7 +123,7 @@ export default function BeneficiariesPage() {
             ben.phone?.includes(query)
         );
         setFilteredBeneficiaries(filtered);
-    };
+    }, [beneficiaries]);
 
     const handleViewDetails = (beneficiary: Beneficiary) => {
         setSelectedBeneficiary(beneficiary);
@@ -290,6 +311,22 @@ export default function BeneficiariesPage() {
                         onSearch={handleSearch}
                     />
                 </div>
+                {isAdminColombia && (
+                    <div className="w-full sm:w-64">
+                        <select
+                            value={selectedVendorId}
+                            onChange={(e) => setSelectedVendorId(e.target.value)}
+                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none bg-white font-medium"
+                        >
+                            <option value="all">Todos los vendedores</option>
+                            {vendors.map(vendor => (
+                                <option key={vendor.id} value={vendor.id}>
+                                    {vendor.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
                 <Button onClick={openCreateModal}>
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -332,6 +369,9 @@ export default function BeneficiariesPage() {
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Banco</th>
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Cuenta</th>
                                         <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Cliente</th>
+                                        {isAdminColombia && (
+                                            <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase">Vendedor</th>
+                                        )}
                                         <th className="px-4 lg:px-6 py-3 text-right text-xs md:text-sm font-medium text-gray-500 uppercase">Acciones</th>
                                     </tr>
                                 </thead>
@@ -362,6 +402,11 @@ export default function BeneficiariesPage() {
                                             <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">
                                                 {beneficiary.clientColombia?.name || '-'}
                                             </td>
+                                            {isAdminColombia && (
+                                                <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">
+                                                    {beneficiary.clientColombia?.vendedor?.name || '-'}
+                                                </td>
+                                            )}
                                             <td className="px-4 lg:px-6 py-4 text-right text-xs md:text-sm">
                                                 <div className="flex gap-2 justify-end">
                                                     <button
@@ -393,7 +438,12 @@ export default function BeneficiariesPage() {
                                             <div className="font-medium text-gray-900 truncate">{beneficiary.fullName}</div>
                                             <div className="text-sm text-gray-500 truncate">{beneficiary.bankName} · {beneficiary.accountNumber}</div>
                                         </div>
-                                        <div className="text-right text-sm text-gray-600">{beneficiary.clientColombia?.name || '-'}</div>
+                                        <div className="text-right text-sm text-gray-600">
+                                            <div>{beneficiary.clientColombia?.name || '-'}</div>
+                                            {isAdminColombia && (
+                                                <div className="text-[10px] text-gray-400 italic">Vdor: {beneficiary.clientColombia?.vendedor?.name || '-'}</div>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="mt-3 flex items-center justify-between">
                                         <div className="text-sm text-gray-600">{beneficiary.documentId}</div>
