@@ -155,6 +155,7 @@ export default function BeneficiariesPage() {
 
     const openEditModal = (beneficiary: Beneficiary) => {
         setEditingBeneficiary(beneficiary);
+        const clientId = beneficiary.clientColombia?.id || '';
         setFormData({
             fullName: beneficiary.fullName,
             documentId: beneficiary.documentId,
@@ -163,7 +164,7 @@ export default function BeneficiariesPage() {
             accountType: beneficiary.accountType || 'ahorro',
             phone: beneficiary.phone || '',
             isPagoMovil: beneficiary.isPagoMovil || false,
-            clientColombiaId: beneficiary.clientColombia?.id || '',
+            clientColombiaId: clientId.toString(),
         });
         setClientSearch('');
         setFormErrors({});
@@ -736,6 +737,8 @@ export default function BeneficiariesPage() {
                         {/* Lista de clientes (Top 3 o Resultados) */}
                         <div className={`border-2 rounded-xl p-2 max-h-48 overflow-y-auto ${formErrors.clientColombiaId ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
                             {(() => {
+                                // Siempre incluir el cliente seleccionado actualmente
+                                const selectedClient = clients.find(c => c.id === Number(formData.clientColombiaId));
                                 const filtered = clientSearch.trim() === ''
                                     ? clients.slice(0, 3)
                                     : clients.filter(c =>
@@ -743,7 +746,15 @@ export default function BeneficiariesPage() {
                                         c.phone.includes(clientSearch)
                                     );
 
-                                if (filtered.length === 0) {
+                                // Siempre incluir el cliente seleccionado al principio
+                                let displayClients = [...new Set([selectedClient, ...filtered].filter(Boolean))];
+                                
+                                // Si hay búsqueda, mantener el seleccionado y agregar resultados
+                                if (clientSearch.trim() !== '' && selectedClient && !filtered.some(c => c.id === selectedClient.id)) {
+                                    displayClients = [selectedClient, ...filtered];
+                                }
+
+                                if (displayClients.length === 0) {
                                     return <p className="text-center py-4 text-sm text-gray-500">No se encontraron clientes</p>;
                                 }
 
@@ -752,7 +763,9 @@ export default function BeneficiariesPage() {
                                         <p className="text-[10px] text-gray-400 px-2 uppercase font-bold tracking-wider mb-1">
                                             {clientSearch.trim() === '' ? 'Últimos 3 creados' : 'Resultados de búsqueda'}
                                         </p>
-                                        {filtered.map(client => (
+                                        {displayClients.map((client: Client | undefined) => {
+                                            if (!client) return null;
+                                            return (
                                             <button
                                                 key={client.id}
                                                 type="button"
@@ -770,7 +783,8 @@ export default function BeneficiariesPage() {
                                                     {client.phone}
                                                 </span>
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 );
                             })()}
