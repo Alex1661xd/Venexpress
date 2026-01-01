@@ -315,6 +315,15 @@ export class TransactionsController {
     return this.transactionsService.getPendingPurchaseRateTransactions(query, user);
   }
 
+  @Get('with-purchase-rate')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  getTransactionsWithPurchaseRate(
+    @Query() query: { startDate?: string; endDate?: string; vendorId?: number },
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.getTransactionsWithPurchaseRate(query, user);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.transactionsService.findOne(+id, user);

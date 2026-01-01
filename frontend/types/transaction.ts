@@ -100,10 +100,11 @@ export interface DebtResponse {
 
 // DTO para establecer la tasa de compra (coincide con SetPurchaseRateDto del backend)
 export interface SetPurchaseRateDto {
-    purchaseRate: number;
+    purchaseRate?: number; // Opcional para permitir eliminar la tasa
     isFinal?: boolean;
     transactionIds?: number[];
     date?: string; // YYYY-MM-DD
+    removeRate?: boolean; // Si es true, elimina la tasa de compra
 }
 
 export interface PendingPurchaseRateQuery {

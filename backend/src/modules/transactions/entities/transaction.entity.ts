@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
   Index,
@@ -10,6 +11,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Client } from '../../clients/entities/client.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
+import { TransactionHistory } from './transaction-history.entity';
 import { TransactionStatus } from '../../../common/enums/transaction-status.enum';
 
 @Entity('transactions')
@@ -28,6 +30,9 @@ export class Transaction {
 
   @ManyToOne(() => Beneficiary, { nullable: true })
   beneficiary: Beneficiary;
+
+  @OneToMany(() => TransactionHistory, history => history.transaction)
+  history: TransactionHistory[];
 
   // Snapshot de datos del Destinatario (inmutables)
   @Column({ nullable: true })

@@ -140,6 +140,11 @@ export const transactionsService = {
         return response.data;
     },
 
+    async getTransactionsWithPurchaseRate(query: PendingPurchaseRateQuery): Promise<Transaction[]> {
+        const response = await api.get<Transaction[]>('/transactions/with-purchase-rate', { params: query });
+        return response.data;
+    },
+
     async setPurchaseRate(id: number, dto: SetPurchaseRateDto): Promise<Transaction> {
         const response = await api.patch<Transaction>(`/transactions/${id}/purchase-rate`, dto);
         return response.data;

@@ -1712,16 +1712,40 @@ export class TransactionsService {
       throw new ForbiddenException('No tiene permiso para realizar esta acción');
     }
 
-    // Actualizar la tasa de compra
-    transaction.purchaseRate = setPurchaseRateDto.purchaseRate;
-    transaction.isPurchaseRateSet = true;
+    // Si se solicita eliminar la tasa de compra
+    if (setPurchaseRateDto.removeRate) {
+      transaction.purchaseRate = null;
+      transaction.isPurchaseRateSet = false;
+      await this.createHistoryEntry(
+        transaction.id,
+        TransactionStatus.COMPLETADO,
+        `Tasa de compra eliminada por ${user.name}`,
+        user.id,
+      );
+      return this.transactionsRepository.save(transaction);
+    }
 
-    // Si se marca como final, actualizar el historial
+    // Si se proporciona una nueva tasa de compra, actualizarla
+    if (setPurchaseRateDto.purchaseRate !== undefined && setPurchaseRateDto.purchaseRate !== null) {
+      transaction.purchaseRate = setPurchaseRateDto.purchaseRate;
+    }
+
+    // Si se marca como final, actualizar el estado y el historial
     if (setPurchaseRateDto.isFinal) {
+      transaction.isPurchaseRateSet = true;
       await this.createHistoryEntry(
         transaction.id,
         TransactionStatus.TASA_COMPRA_ESTABLECIDA,
-        `Tasa de compra establecida en ${setPurchaseRateDto.purchaseRate} por ${user.name}`,
+        `Tasa de compra establecida en ${transaction.purchaseRate} (definitiva) por ${user.name}`,
+        user.id,
+      );
+    } else if (setPurchaseRateDto.purchaseRate !== undefined && setPurchaseRateDto.purchaseRate !== null) {
+      // Si solo se actualiza la tasa sin marcar como final, mantener isPurchaseRateSet en false
+      transaction.isPurchaseRateSet = false;
+      await this.createHistoryEntry(
+        transaction.id,
+        TransactionStatus.COMPLETADO,
+        `Tasa de compra actualizada a ${transaction.purchaseRate} (no definitiva) por ${user.name}`,
         user.id,
       );
     }
@@ -1731,6 +1755,7 @@ export class TransactionsService {
 
   /**
    * Establece la tasa de compra para múltiples transacciones
+   * También puede eliminar tasas o marcar como definitivas
    */
   async bulkSetPurchaseRate(
     setPurchaseRateDto: SetPurchaseRateDto,
@@ -1743,7 +1768,15 @@ export class TransactionsService {
 
     let query = this.transactionsRepository
       .createQueryBuilder('transaction')
-      .where('transaction.isPurchaseRateSet = :isSet', { isSet: false });
+      .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO });
+
+    // Si se solicita eliminar la tasa, buscar transacciones con tasa asignada
+    // Si no, buscar transacciones sin tasa definitiva
+    if (setPurchaseRateDto.removeRate) {
+      query = query.andWhere('transaction.purchaseRate IS NOT NULL');
+    } else {
+      query = query.andWhere('transaction.isPurchaseRateSet = :isSet', { isSet: false });
+    }
 
     // Filtrar por IDs específicos si se proporcionan
     if (setPurchaseRateDto.transactionIds?.length > 0) {
@@ -1779,80 +1812,154 @@ export class TransactionsService {
 
     const ids = transactions.map((t) => t.id);
 
+    // Preparar los datos de actualización
+    const updateData: any = {};
+
+    // Si se solicita eliminar la tasa
+    if (setPurchaseRateDto.removeRate) {
+      updateData.purchaseRate = null;
+      updateData.isPurchaseRateSet = false;
+    } else {
+      // Si se proporciona una nueva tasa de compra, actualizarla
+      if (setPurchaseRateDto.purchaseRate !== undefined && setPurchaseRateDto.purchaseRate !== null) {
+        updateData.purchaseRate = setPurchaseRateDto.purchaseRate;
+      }
+      // Si se marca como final
+      if (setPurchaseRateDto.isFinal) {
+        updateData.isPurchaseRateSet = true;
+      } else if (setPurchaseRateDto.purchaseRate !== undefined && setPurchaseRateDto.purchaseRate !== null) {
+        // Si solo se actualiza la tasa sin marcar como final
+        updateData.isPurchaseRateSet = false;
+      }
+    }
+
     // Actualizar por IDs usando el repositorio (evita problemas de alias en UPDATE)
     const updateResult = await this.transactionsRepository.update(
       { id: In(ids) },
-      {
-        purchaseRate: setPurchaseRateDto.purchaseRate,
-        isPurchaseRateSet: true,
-      },
+      updateData,
     );
 
     // Crear entradas de historial para las transacciones actualizadas
     await Promise.all(
-      transactions.map((transaction) =>
-        this.createHistoryEntry(
-          transaction.id,
-          TransactionStatus.TASA_COMPRA_ESTABLECIDA,
-          `Tasa de compra establecida en ${setPurchaseRateDto.purchaseRate} (actualización masiva) por ${user.name}`,
-          user.id,
-        ),
-      ),
+      transactions.map((transaction) => {
+        if (setPurchaseRateDto.removeRate) {
+          return this.createHistoryEntry(
+            transaction.id,
+            TransactionStatus.COMPLETADO,
+            `Tasa de compra eliminada (actualización masiva) por ${user.name}`,
+            user.id,
+          );
+        } else if (setPurchaseRateDto.isFinal && setPurchaseRateDto.purchaseRate !== undefined) {
+          return this.createHistoryEntry(
+            transaction.id,
+            TransactionStatus.TASA_COMPRA_ESTABLECIDA,
+            `Tasa de compra establecida en ${setPurchaseRateDto.purchaseRate} (definitiva, actualización masiva) por ${user.name}`,
+            user.id,
+          );
+        } else if (setPurchaseRateDto.purchaseRate !== undefined) {
+          return this.createHistoryEntry(
+            transaction.id,
+            TransactionStatus.COMPLETADO,
+            `Tasa de compra actualizada a ${setPurchaseRateDto.purchaseRate} (no definitiva, actualización masiva) por ${user.name}`,
+            user.id,
+          );
+        }
+        return Promise.resolve();
+      }),
     );
 
+    let message = '';
+    if (setPurchaseRateDto.removeRate) {
+      message = `Se eliminó la tasa de compra de ${updateResult.affected || 0} transacciones`;
+    } else if (setPurchaseRateDto.isFinal) {
+      message = `Se marcó como definitiva la tasa de compra para ${updateResult.affected || 0} transacciones`;
+    } else if (setPurchaseRateDto.purchaseRate !== undefined) {
+      message = `Se actualizó la tasa de compra para ${updateResult.affected || 0} transacciones`;
+    }
+
     return {
-      message: `Se actualizó la tasa de compra para ${updateResult.affected || 0} transacciones`,
+      message,
       affected: updateResult.affected || 0,
     };
   }
 
   /**
    * Obtiene transacciones pendientes de tasa de compra
+   * Excluye las que ya tienen una tasa asignada (aunque no esté marcada como definitiva)
    */
   async getPendingPurchaseRateTransactions(
     query: { startDate?: string; endDate?: string; vendorId?: number },
     user: User,
   ): Promise<Transaction[]> {
-    // Verificar permisos - solo admin de Venezuela puede ver esto
-    if (user.role !== UserRole.ADMIN_VENEZUELA) {
-      throw new ForbiddenException('No tiene permiso para ver estas transacciones');
-    }
-
-    const queryBuilder = this.transactionsRepository
+    let queryBuilder = this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
       .leftJoinAndSelect('transaction.beneficiary', 'beneficiary')
       .where('transaction.isPurchaseRateSet = :isSet', { isSet: false })
+      .andWhere('transaction.purchaseRate IS NULL')
       .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO });
 
     // Filtrar por rango de fechas
     if (query.startDate) {
-      const startDate = parseLocalDate(query.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      queryBuilder.andWhere('transaction.createdAt >= :startDate', { startDate });
+      const start = parseLocalDate(query.startDate);
+      start.setHours(0, 0, 0, 0);
+      queryBuilder.andWhere('transaction.createdAt >= :startDate', { startDate: start });
     }
-
     if (query.endDate) {
-      const endDate = parseLocalDate(query.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      queryBuilder.andWhere('transaction.createdAt <= :endDate', { endDate });
+      // Forzar final del día en zona horaria local
+      const end = parseLocalDate(query.endDate);
+      end.setHours(23, 59, 59, 999);
+      queryBuilder.andWhere('transaction.createdAt <= :endDate', { endDate: end });
     }
 
-    // Filtrar por vendedor si se especifica
+    // Filtrar por vendedor si se proporciona
     if (query.vendorId) {
-      queryBuilder.andWhere('transaction.createdBy.id = :vendorId', {
-        vendorId: query.vendorId,
-      });
+      queryBuilder.andWhere('createdBy.id = :vendorId', { vendorId: query.vendorId });
     }
 
-    queryBuilder.orderBy('transaction.createdAt', 'ASC');
-
-    return queryBuilder.getMany();
+    return queryBuilder.orderBy('transaction.createdAt', 'DESC').getMany();
   }
 
   /**
-   * Obtiene el detalle completo de la deuda de Admin Colombia con Admin Venezuela
-   * Incluye desglose por transacción y pagos realizados
+   * Obtiene transacciones con tasa de compra asignada pero NO marcadas como definitivas
+   * Estas son las transacciones que el admin puede editar, marcar como definitivas, o eliminar la tasa
+   */
+  async getTransactionsWithPurchaseRate(
+    query: { startDate?: string; endDate?: string; vendorId?: number },
+    user: User,
+  ): Promise<Transaction[]> {
+    let queryBuilder = this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'createdBy')
+      .leftJoinAndSelect('transaction.beneficiary', 'beneficiary')
+      .leftJoinAndSelect('transaction.history', 'history')
+      .where('transaction.purchaseRate IS NOT NULL')
+      .andWhere('transaction.isPurchaseRateSet = :isSet', { isSet: false })
+      .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO });
+
+    // Filtrar por rango de fechas
+    if (query.startDate) {
+      const start = parseLocalDate(query.startDate);
+      start.setHours(0, 0, 0, 0);
+      queryBuilder = queryBuilder.andWhere('transaction.createdAt >= :startDate', { startDate: start });
+    }
+    if (query.endDate) {
+      // Forzar final del día en zona horaria local
+      const end = parseLocalDate(query.endDate);
+      end.setHours(23, 59, 59, 999);
+      queryBuilder.andWhere('transaction.createdAt <= :endDate', { endDate: end });
+    }
+
+    // Filtrar por vendedor si se proporciona
+    if (query.vendorId) {
+      queryBuilder.andWhere('createdBy.id = :vendorId', { vendorId: query.vendorId });
+    }
+
+    return queryBuilder.orderBy('transaction.createdAt', 'DESC').getMany();
+  }
+
+  /**
+   * Obtiene transacciones pendientes de tasa de compra
    */
   async getVenezuelaDebtDetail(query: any, user: User): Promise<VenezuelaDebtSummary> {
     // Verificar permisos
@@ -1880,7 +1987,7 @@ export class TransactionsService {
     }
 
     // Obtener transacciones completadas con tasa de compra establecida
-    const transactions = await this.transactionsRepository.find({
+    const transactionsWithRate = await this.transactionsRepository.find({
       where: {
         status: TransactionStatus.COMPLETADO,
         isPurchaseRateSet: true,
@@ -1893,7 +2000,7 @@ export class TransactionsService {
     let totalDebt = 0;
     const transactionDetails: TransactionDebtDetail[] = [];
 
-    transactions.forEach((tx) => {
+    transactionsWithRate.forEach((tx) => {
       const cop = Number(tx.amountCOP) || 0;
       const bs = Number(tx.amountBs) || 0;
       const saleRate = Number(tx.saleRate) || 0;
