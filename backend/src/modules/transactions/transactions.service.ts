@@ -979,7 +979,18 @@ export class TransactionsService {
       dateTo.setHours(23, 59, 59, 999);
     }
 
-    const transactions = await this.transactionsRepository.find({
+    // Para comisiones: TODAS las transacciones completadas (no necesita tasa de compra)
+    const allCompletedTransactions = await this.transactionsRepository.find({
+      where: {
+        status: TransactionStatus.COMPLETADO,
+        createdAt: Between(dateFrom, dateTo),
+      },
+      relations: ['createdBy'],
+      order: { createdAt: 'ASC' },
+    });
+
+    // Para ganancias/deudas: solo transacciones con tasa de compra definitiva
+    const transactionsWithPurchaseRate = await this.transactionsRepository.find({
       where: {
         status: TransactionStatus.COMPLETADO,
         isPurchaseRateSet: true,
@@ -1006,7 +1017,38 @@ export class TransactionsService {
     let globalAdminColombiaEarnings = 0;
     let globalAmountOwedToVenezuela = 0;
 
-    transactions.forEach((tx) => {
+    // Calcular comisiones de TODAS las transacciones completadas
+    allCompletedTransactions.forEach((tx) => {
+      const vendorId = tx.createdBy?.id;
+      const vendorName = tx.createdBy?.name || `Vendedor #${vendorId}`;
+
+      if (!byVendor[vendorId]) {
+        byVendor[vendorId] = {
+          vendorId,
+          vendorName,
+          totalCommission: 0,
+          commissionPaid: 0,
+          commissionPending: 0,
+          adminColombiaEarnings: 0,
+          amountOwedToVenezuela: 0,
+        };
+      }
+
+      const cop = Number(tx.amountCOP) || 0;
+      const commission = cop * 0.02; // 2% para el vendedor
+
+      const vendorAgg = byVendor[vendorId];
+      vendorAgg.totalCommission += commission;
+      globalCommissionTotal += commission;
+
+      if (tx.isCommissionPaidToVendor) {
+        vendorAgg.commissionPaid += commission;
+        globalCommissionPaid += commission;
+      }
+    });
+
+    // Calcular ganancias y deudas solo de transacciones con tasa de compra definitiva
+    transactionsWithPurchaseRate.forEach((tx) => {
       const vendorId = tx.createdBy?.id;
       const vendorName = tx.createdBy?.name || `Vendedor #${vendorId}`;
 
@@ -1039,27 +1081,24 @@ export class TransactionsService {
       const gananciaAdminColombia = gananciaSistema / 2;
       const deudaColombiaConVenezuela = inversion + gananciaAdminColombia;
 
-      const commission = cop * 0.02; // 2% para el vendedor
-
       const vendorAgg = byVendor[vendorId];
-      vendorAgg.totalCommission += commission;
       vendorAgg.adminColombiaEarnings += gananciaAdminColombia;
       vendorAgg.amountOwedToVenezuela += deudaColombiaConVenezuela;
 
-      globalCommissionTotal += commission;
       globalAdminColombiaEarnings += gananciaAdminColombia;
       globalAmountOwedToVenezuela += deudaColombiaConVenezuela;
-
-      if (tx.isCommissionPaidToVendor) {
-        vendorAgg.commissionPaid += commission;
-        globalCommissionPaid += commission;
-      }
     });
 
     // Calcular pendientes por vendedor
     Object.values(byVendor).forEach((agg) => {
       agg.commissionPending = agg.totalCommission - agg.commissionPaid;
     });
+
+    // Detectar si hay transacciones completadas sin tasa de compra definitiva
+    const transactionsWithoutPurchaseRate = allCompletedTransactions.filter(
+      (tx) => !tx.isPurchaseRateSet || tx.purchaseRate === null,
+    );
+    const hasTransactionsWithoutPurchaseRate = transactionsWithoutPurchaseRate.length > 0;
 
     return {
       global: {
@@ -1068,6 +1107,8 @@ export class TransactionsService {
         commissionPending: globalCommissionTotal - globalCommissionPaid,
         adminColombiaEarnings: globalAdminColombiaEarnings,
         amountOwedToVenezuela: globalAmountOwedToVenezuela,
+        hasTransactionsWithoutPurchaseRate,
+        transactionsWithoutPurchaseRateCount: transactionsWithoutPurchaseRate.length,
       },
       byVendor: Object.values(byVendor),
       dateRange: { from: dateFrom, to: dateTo },
@@ -1098,6 +1139,7 @@ export class TransactionsService {
       dateTo.setHours(23, 59, 59, 999);
     }
 
+    // Para ganancias/deudas: solo transacciones con tasa de compra definitiva
     const transactions = await this.transactionsRepository.find({
       where: {
         status: TransactionStatus.COMPLETADO,
@@ -1107,6 +1149,19 @@ export class TransactionsService {
       relations: ['createdBy'],
       order: { createdAt: 'ASC' },
     });
+
+    // Detectar si hay transacciones completadas sin tasa de compra definitiva
+    const allCompletedTransactions = await this.transactionsRepository.find({
+      where: {
+        status: TransactionStatus.COMPLETADO,
+        createdAt: Between(dateFrom, dateTo),
+      },
+      relations: ['createdBy'],
+    });
+    const transactionsWithoutPurchaseRate = allCompletedTransactions.filter(
+      (tx) => !tx.isPurchaseRateSet || tx.purchaseRate === null,
+    );
+    const hasTransactionsWithoutPurchaseRate = transactionsWithoutPurchaseRate.length > 0;
 
     let totalEarnings = 0; // Ganancias de Admin Venezuela
     let totalDebtFromColombia = 0; // Deuda de Admin Colombia con Venezuela
@@ -1198,6 +1253,8 @@ export class TransactionsService {
         notes: p.notes,
       })),
       dateRange: { from: dateFrom, to: dateTo },
+      hasTransactionsWithoutPurchaseRate,
+      transactionsWithoutPurchaseRateCount: transactionsWithoutPurchaseRate.length,
     };
   }
 

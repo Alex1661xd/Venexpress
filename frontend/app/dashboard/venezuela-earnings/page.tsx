@@ -149,6 +149,14 @@ export default function VenezuelaEarningsPage() {
                 ${summary.totalEarnings.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
               </p>
               <p className="text-xs opacity-75 mt-1">COP</p>
+              {summary.hasTransactionsWithoutPurchaseRate && (
+                <p className="text-xs text-green-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
+                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                  {summary.transactionsWithoutPurchaseRateCount && (
+                    <> {summary.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
+                  )}
+                </p>
+              )}
             </div>
 
             {/* Deuda Total de Colombia */}
@@ -163,6 +171,14 @@ export default function VenezuelaEarningsPage() {
                 ${summary.totalDebtFromColombia.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
               </p>
               <p className="text-xs opacity-75 mt-1">COP</p>
+              {summary.hasTransactionsWithoutPurchaseRate && (
+                <p className="text-xs text-amber-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
+                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                  {summary.transactionsWithoutPurchaseRateCount && (
+                    <> {summary.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
+                  )}
+                </p>
+              )}
             </div>
 
             {/* Total Pagado */}

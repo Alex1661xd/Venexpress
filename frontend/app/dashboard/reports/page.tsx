@@ -47,6 +47,8 @@ interface AdminColombiaFinancialSummary {
         commissionPending: number;
         adminColombiaEarnings: number;
         amountOwedToVenezuela: number;
+        hasTransactionsWithoutPurchaseRate?: boolean;
+        transactionsWithoutPurchaseRateCount?: number;
     };
     byVendor: Array<{
         vendorId: number;
@@ -378,6 +380,14 @@ export default function ReportsPage() {
                                         {formatCurrency(adminSummary.global.adminColombiaEarnings, 'COP')}
                                     </p>
                                     <p className="text-xs text-teal-50 mt-2 italic">* Calculado post-comisión</p>
+                                    {adminSummary.global.hasTransactionsWithoutPurchaseRate && (
+                                        <p className="text-xs text-teal-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
+                                            ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                                            {adminSummary.global.transactionsWithoutPurchaseRateCount && (
+                                                <> {adminSummary.global.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
+                                            )}
+                                        </p>
+                                    )}
                                 </Card>
                                 <Card className="bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-none">
                                     <p className="text-indigo-100 text-sm font-medium">Deuda con Admin Venezuela</p>
@@ -385,6 +395,14 @@ export default function ReportsPage() {
                                         {formatCurrency(adminSummary.global.amountOwedToVenezuela, 'COP')}
                                     </p>
                                     <p className="text-xs text-indigo-50 mt-2">Monto neto a transferir</p>
+                                    {adminSummary.global.hasTransactionsWithoutPurchaseRate && (
+                                        <p className="text-xs text-indigo-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
+                                            ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                                            {adminSummary.global.transactionsWithoutPurchaseRateCount && (
+                                                <> {adminSummary.global.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
+                                            )}
+                                        </p>
+                                    )}
                                 </Card>
                             </div>
 
