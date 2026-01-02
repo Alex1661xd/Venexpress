@@ -165,7 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         },
         // --- Navegación de Admin Venezuela ---
         {
-            name: 'Tasa de Cambio',
+            name: 'Tasa de Venta',
             href: '/dashboard/rates',
             roles: ['admin_venezuela'],
             icon: (
@@ -366,7 +366,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ),
         },
         {
-            name: 'Tasa de Cambio',
+            name: 'Tasa de Venta',
             href: '/dashboard/rates',
             roles: ['admin_colombia'],
             isSecondary: true,
