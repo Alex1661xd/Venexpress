@@ -77,9 +77,10 @@ export class TransactionsController {
   @Roles(UserRole.VENDEDOR)
   markAsPaid(
     @Body('transactionIds') transactionIds: number[],
+    @Body('paymentMethod') paymentMethod: string,
     @CurrentUser() user: any,
   ) {
-    return this.transactionsService.markTransactionsAsPaid(transactionIds, user);
+    return this.transactionsService.markTransactionsAsPaid(transactionIds, paymentMethod, user);
   }
 
   @Post('mark-date-range-as-paid')
@@ -87,9 +88,10 @@ export class TransactionsController {
   markDateRangeAsPaid(
     @Body('startDate') startDate: string,
     @Body('endDate') endDate: string,
+    @Body('paymentMethod') paymentMethod: string,
     @CurrentUser() user: any,
   ) {
-    return this.transactionsService.markTransactionsByDateRangeAsPaid(startDate, endDate, user);
+    return this.transactionsService.markTransactionsByDateRangeAsPaid(startDate, endDate, paymentMethod, user);
   }
 
   // Admin Colombia endpoints

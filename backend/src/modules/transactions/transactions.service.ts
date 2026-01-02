@@ -238,6 +238,7 @@ export class TransactionsService {
 
   async markTransactionsAsPaid(
     transactionIds: number[],
+    paymentMethod: string,
     user: User,
   ): Promise<void> {
     if (user.role !== 'vendedor') {
@@ -260,6 +261,7 @@ export class TransactionsService {
     transactions.forEach(transaction => {
       transaction.isPaidByVendor = true;
       transaction.paidByVendorAt = now;
+      transaction.vendorPaymentMethod = paymentMethod as any;
     });
 
     await this.transactionsRepository.save(transactions);
@@ -268,6 +270,7 @@ export class TransactionsService {
   async markTransactionsByDateRangeAsPaid(
     startDate: string,
     endDate: string,
+    paymentMethod: string,
     user: User,
   ): Promise<number> {
     if (user.role !== 'vendedor') {
@@ -290,6 +293,7 @@ export class TransactionsService {
       {
         isPaidByVendor: true,
         paidByVendorAt: new Date(),
+        vendorPaymentMethod: paymentMethod as any,
       },
     );
 

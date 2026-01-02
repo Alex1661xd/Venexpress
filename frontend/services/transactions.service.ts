@@ -47,14 +47,15 @@ export const transactionsService = {
         return response.data;
     },
 
-    async markAsPaid(transactionIds: number[]): Promise<void> {
-        await api.post('/transactions/mark-as-paid', { transactionIds });
+    async markAsPaid(transactionIds: number[], paymentMethod: string): Promise<void> {
+        await api.post('/transactions/mark-as-paid', { transactionIds, paymentMethod });
     },
 
-    async markDateRangeAsPaid(startDate: string, endDate: string): Promise<{ affected: number }> {
+    async markDateRangeAsPaid(startDate: string, endDate: string, paymentMethod: string): Promise<{ affected: number }> {
         const response = await api.post<{ affected: number }>('/transactions/mark-date-range-as-paid', {
             startDate,
             endDate,
+            paymentMethod,
         });
         return response.data;
     },

@@ -26,6 +26,10 @@ export default function DebtPage() {
     const [isRangeModalOpen, setIsRangeModalOpen] = useState(false);
     const [rangeStartDate, setRangeStartDate] = useState('');
     const [rangeEndDate, setRangeEndDate] = useState('');
+    const [isPaymentMethodModalOpen, setIsPaymentMethodModalOpen] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'consignacion_nequi' | 'consignacion_bancolombia' | ''>('');
+    const [pendingTransactionIds, setPendingTransactionIds] = useState<number[]>([]);
+    const [isRangePayment, setIsRangePayment] = useState(false);
     const [activeTab, setActiveTab] = useState<'unpaid' | 'paid'>('unpaid');
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ page: 1, lastPage: 1, total: 0 });
@@ -133,7 +137,7 @@ export default function DebtPage() {
         }
     };
 
-    const handleMarkSelectedAsPaid = async () => {
+    const handleMarkSelectedAsPaid = () => {
         if (selectedTransactions.length === 0) {
             setAlertState({
                 isOpen: true,
@@ -143,20 +147,48 @@ export default function DebtPage() {
             return;
         }
 
+        setPendingTransactionIds(selectedTransactions);
+        setIsRangePayment(false);
+        setPaymentMethod('');
+        setIsPaymentMethodModalOpen(true);
+    };
+
+    const handleConfirmPaymentMethod = async () => {
+        if (!paymentMethod) {
+            setAlertState({
+                isOpen: true,
+                message: 'Debes seleccionar un método de pago',
+                variant: 'warning'
+            });
+            return;
+        }
+
+        setIsPaymentMethodModalOpen(false);
+
         setConfirmState({
             isOpen: true,
-            message: `¿Estás seguro de marcar ${selectedTransactions.length} transacción(es) como pagada(s)? Esta acción no se puede deshacer.`,
+            message: `¿Estás seguro de marcar ${pendingTransactionIds.length} transacción(es) como pagada(s)? Esta acción no se puede deshacer.`,
             onConfirm: async () => {
                 try {
-                    await transactionsService.markAsPaid(selectedTransactions);
+                    if (isRangePayment) {
+                        const result = await transactionsService.markDateRangeAsPaid(rangeStartDate, rangeEndDate, paymentMethod);
+                        setAlertState({
+                            isOpen: true,
+                            message: `${result.affected || 0} transacción(es) marcada(s) como pagadas exitosamente`,
+                            variant: 'success'
+                        });
+                    } else {
+                        await transactionsService.markAsPaid(pendingTransactionIds, paymentMethod);
+                        setAlertState({
+                            isOpen: true,
+                            message: 'Transacciones marcadas como pagadas exitosamente',
+                            variant: 'success'
+                        });
+                    }
                     setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
-                    setAlertState({
-                        isOpen: true,
-                        message: 'Transacciones marcadas como pagadas exitosamente',
-                        variant: 'success'
-                    });
                     setSelectedTransactions([]);
-                    setSelectedTransactions([]);
+                    setPendingTransactionIds([]);
+                    setPaymentMethod('');
                     fetchStats();
                     fetchTransactions();
                 } catch (error) {
@@ -177,7 +209,7 @@ export default function DebtPage() {
         setIsRangeModalOpen(true);
     };
 
-    const handleConfirmMarkByDateRange = async () => {
+    const handleConfirmMarkByDateRange = () => {
         if (!rangeStartDate || !rangeEndDate) {
             setAlertState({
                 isOpen: true,
@@ -188,31 +220,9 @@ export default function DebtPage() {
         }
 
         setIsRangeModalOpen(false);
-
-        setConfirmState({
-            isOpen: true,
-            message: `¿Estás seguro de marcar todas las transacciones entre ${new Date(rangeStartDate).toLocaleDateString('es-CO')} y ${new Date(rangeEndDate).toLocaleDateString('es-CO')} como pagadas? Esta acción no se puede deshacer.`,
-            onConfirm: async () => {
-                try {
-                    const result = await transactionsService.markDateRangeAsPaid(rangeStartDate, rangeEndDate);
-                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
-                    setAlertState({
-                        isOpen: true,
-                        message: `${result.affected || 0} transacción(es) marcada(s) como pagadas exitosamente`,
-                        variant: 'success'
-                    });
-                    fetchStats();
-                    fetchTransactions();
-                } catch (error) {
-                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
-                    setAlertState({
-                        isOpen: true,
-                        message: 'Error al marcar transacciones como pagadas',
-                        variant: 'error'
-                    });
-                }
-            }
-        });
+        setIsRangePayment(true);
+        setPaymentMethod('');
+        setIsPaymentMethodModalOpen(true);
     };
 
     if (user?.role !== 'vendedor') {
@@ -526,6 +536,89 @@ export default function DebtPage() {
                 variant={alertState.variant}
                 onClose={() => setAlertState({ ...alertState, isOpen: false })}
             />
+
+            {/* Payment Method Modal */}
+            <Modal
+                isOpen={isPaymentMethodModalOpen}
+                onClose={() => {
+                    setIsPaymentMethodModalOpen(false);
+                    setPaymentMethod('');
+                }}
+                title="Seleccionar método de pago"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        Selecciona cómo realizaste el pago de {isRangePayment ? 'las transacciones' : 'la(s) transacción(es)'}:
+                    </p>
+
+                    <div className="space-y-2">
+                        <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                            <input
+                                type="radio"
+                                name="paymentMethod"
+                                value="efectivo"
+                                checked={paymentMethod === 'efectivo'}
+                                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                                className="mr-3 w-4 h-4 text-blue-600"
+                            />
+                            <div>
+                                <p className="font-medium text-gray-900">Efectivo</p>
+                                <p className="text-xs text-gray-500">Pago realizado en efectivo</p>
+                            </div>
+                        </label>
+
+                        <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                            <input
+                                type="radio"
+                                name="paymentMethod"
+                                value="consignacion_nequi"
+                                checked={paymentMethod === 'consignacion_nequi'}
+                                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                                className="mr-3 w-4 h-4 text-blue-600"
+                            />
+                            <div>
+                                <p className="font-medium text-gray-900">Consignación Nequi</p>
+                                <p className="text-xs text-gray-500">Pago realizado por Nequi</p>
+                            </div>
+                        </label>
+
+                        <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                            <input
+                                type="radio"
+                                name="paymentMethod"
+                                value="consignacion_bancolombia"
+                                checked={paymentMethod === 'consignacion_bancolombia'}
+                                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                                className="mr-3 w-4 h-4 text-blue-600"
+                            />
+                            <div>
+                                <p className="font-medium text-gray-900">Consignación Bancolombia</p>
+                                <p className="text-xs text-gray-500">Pago realizado por Bancolombia</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                        <button
+                            onClick={() => {
+                                setIsPaymentMethodModalOpen(false);
+                                setPaymentMethod('');
+                            }}
+                            className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleConfirmPaymentMethod}
+                            disabled={!paymentMethod}
+                            className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+                        >
+                            Continuar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* Confirm Dialog */}
             <ConfirmDialog

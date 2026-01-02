@@ -13,6 +13,7 @@ import { Client } from '../../clients/entities/client.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { TransactionHistory } from './transaction-history.entity';
 import { TransactionStatus } from '../../../common/enums/transaction-status.enum';
+import { VendorPaymentMethod } from '../../../common/enums/vendor-payment-method.enum';
 
 @Entity('transactions')
 export class Transaction {
@@ -97,6 +98,14 @@ export class Transaction {
 
   @Column({ type: 'timestamptz', nullable: true })
   paidByVendorAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: VendorPaymentMethod,
+    nullable: true,
+    name: 'vendor_payment_method',
+  })
+  vendorPaymentMethod: VendorPaymentMethod; // Método de pago usado por el vendedor
 
   // Comisión (2% de la transferencia) pagada por Admin Colombia al vendedor
   @Index()

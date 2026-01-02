@@ -327,6 +327,9 @@ export default function VendorPaymentsPage() {
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado comisión
                 </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Método de pago vendedor
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -368,13 +371,38 @@ export default function VendorPaymentsPage() {
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-2 whitespace-nowrap text-center text-xs">
+                      {tx.isPaidByVendor && tx.vendorPaymentMethod ? (
+                        <span className={`px-2 py-1 rounded-full font-medium ${
+                          tx.vendorPaymentMethod === 'efectivo'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : tx.vendorPaymentMethod === 'consignacion_nequi'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        }`}>
+                          {tx.vendorPaymentMethod === 'efectivo'
+                            ? 'Efectivo'
+                            : tx.vendorPaymentMethod === 'consignacion_nequi'
+                            ? 'Nequi'
+                            : 'Bancolombia'}
+                        </span>
+                      ) : tx.isPaidByVendor ? (
+                        <span className="px-2 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200 font-medium">
+                          Sin método
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-400 border border-gray-200 font-medium">
+                          No pagado
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {!loading && transactions.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-6 text-center text-sm text-gray-500"
                   >
                     No hay transacciones completadas con tasa de compra para los

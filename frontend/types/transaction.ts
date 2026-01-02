@@ -56,6 +56,7 @@ export interface Transaction {
     rejectionReason?: string; // Motivo del rechazo (separado de notes)
     isPaidByVendor?: boolean;
     paidByVendorAt?: string;
+    vendorPaymentMethod?: 'efectivo' | 'consignacion_nequi' | 'consignacion_bancolombia';
     isCommissionPaidToVendor?: boolean;
     commissionPaidAt?: string;
     createdAt: string;

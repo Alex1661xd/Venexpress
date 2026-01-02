@@ -295,13 +295,23 @@ export default function NewTransactionPage() {
     }
 
     // Filter clients: show top 3 if no search, otherwise search all
-    const filteredClients = clientSearch.trim() === ''
+    // Always include the selected client if one is selected
+    const selectedClient = formData.clientPresencialId 
+        ? clients.find(c => c.id.toString() === formData.clientPresencialId)
+        : null;
+    
+    let baseFilteredClients = clientSearch.trim() === ''
         ? clients.slice(0, 3)
         : clients.filter(client =>
             client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
             client.phone.includes(clientSearch) ||
             (client.documentId && client.documentId.includes(clientSearch))
         );
+    
+    // Always include the selected client at the beginning if it exists and isn't already in the list
+    const filteredClients = selectedClient && !baseFilteredClients.some(c => c.id === selectedClient.id)
+        ? [selectedClient, ...baseFilteredClients]
+        : baseFilteredClients;
 
     // Filter beneficiaries: show top 3 if no search, otherwise search all
     const searchedBeneficiaries = beneficiarySearch.trim() === ''
@@ -441,7 +451,9 @@ export default function NewTransactionPage() {
                                             <>
                                                 <div className="mb-2 text-xs text-gray-500 px-1 font-medium italic">
                                                     {clientSearch.trim() === ''
-                                                        ? 'Mostrando los últimos 3 clientes creados. Usa el buscador para ver otros.'
+                                                        ? (selectedClient && !clients.slice(0, 3).some(c => c.id === selectedClient.id)
+                                                            ? 'Cliente seleccionado + últimos 3 clientes creados. Usa el buscador para ver otros.'
+                                                            : 'Mostrando los últimos 3 clientes creados. Usa el buscador para ver otros.')
                                                         : `Resultados de búsqueda: ${filteredClients.length} cliente(s)`}
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
