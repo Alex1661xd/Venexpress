@@ -321,6 +321,7 @@ export default function VendorDetailsPage() {
                     pagination={pagination}
                     onPageChange={setPage}
                     showSelection={false}
+                    showVendorPaymentMethod={activeTab === 'paid'}
                 />
             </div>
         </div>

@@ -14,6 +14,7 @@ interface TransactionListProps {
     selectedTransactions?: number[];
     onSelectTransaction?: (id: number) => void;
     onSelectAll?: () => void;
+    showVendorPaymentMethod?: boolean;
 }
 
 export default function TransactionList({
@@ -24,7 +25,8 @@ export default function TransactionList({
     showSelection = false,
     selectedTransactions = [],
     onSelectTransaction,
-    onSelectAll
+    onSelectAll,
+    showVendorPaymentMethod = false
 }: TransactionListProps) {
 
     const formatCurrency = (amount: number) => {
@@ -109,6 +111,11 @@ export default function TransactionList({
                             <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
                                 Estado
                             </th>
+                            {showVendorPaymentMethod && (
+                                <th className="px-4 lg:px-6 py-3 text-left text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
+                                    Método de Pago
+                                </th>
+                            )}
                             {transactions.some(tx => tx.isPaidByVendor && tx.vendorPaymentProofUrl) && (
                                 <th className="px-4 lg:px-6 py-3 text-center text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
                                     Comprobante
@@ -147,6 +154,27 @@ export default function TransactionList({
                                 <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                                     <Badge status={transaction.status} />
                                 </td>
+                                {showVendorPaymentMethod && (
+                                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                                        {transaction.isPaidByVendor && transaction.vendorPaymentMethod ? (
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                transaction.vendorPaymentMethod === 'efectivo'
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                    : transaction.vendorPaymentMethod === 'consignacion_nequi'
+                                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                            }`}>
+                                                {transaction.vendorPaymentMethod === 'efectivo'
+                                                    ? 'Efectivo'
+                                                    : transaction.vendorPaymentMethod === 'consignacion_nequi'
+                                                    ? 'Nequi'
+                                                    : 'Bancolombia'}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs">-</span>
+                                        )}
+                                    </td>
+                                )}
                                 {transactions.some(tx => tx.isPaidByVendor && tx.vendorPaymentProofUrl) && (
                                     <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-center">
                                         {transaction.isPaidByVendor && transaction.vendorPaymentProofUrl ? (
@@ -224,6 +252,25 @@ export default function TransactionList({
                                     <div className="text-xs text-gray-500 mb-0.5">Fecha</div>
                                     <div className="text-sm text-gray-700">{formatDate(tx.createdAt)}</div>
                                 </div>
+
+                                {showVendorPaymentMethod && tx.isPaidByVendor && tx.vendorPaymentMethod && (
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-0.5">Método de Pago</div>
+                                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                            tx.vendorPaymentMethod === 'efectivo'
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                : tx.vendorPaymentMethod === 'consignacion_nequi'
+                                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                        }`}>
+                                            {tx.vendorPaymentMethod === 'efectivo'
+                                                ? 'Efectivo'
+                                                : tx.vendorPaymentMethod === 'consignacion_nequi'
+                                                ? 'Nequi'
+                                                : 'Bancolombia'}
+                                        </span>
+                                    </div>
+                                )}
 
                                 {tx.isPaidByVendor && tx.vendorPaymentProofUrl && (
                                     <div>
