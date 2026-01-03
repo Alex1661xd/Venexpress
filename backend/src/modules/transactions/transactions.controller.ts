@@ -153,6 +153,46 @@ export class TransactionsController {
     return this.transactionsService.markTransactionsByDateRangeAsPaid(startDate, endDate, paymentMethod, user, proofPath);
   }
 
+  @Post('unmark-as-paid/:transactionId')
+  @Roles(UserRole.VENDEDOR)
+  async unmarkAsPaid(
+    @Param('transactionId') transactionId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.unmarkTransactionAsPaid(transactionId, user);
+  }
+
+  @Patch('update-payment/:transactionId')
+  @Roles(UserRole.VENDEDOR)
+  @UseInterceptors(
+    FileInterceptor('proof', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, cb) => {
+        if (file && !file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+          return cb(new BadRequestException('Solo se permiten imágenes y PDFs'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async updatePayment(
+    @Param('transactionId') transactionId: number,
+    @Body('paymentMethod') paymentMethod?: string,
+    @UploadedFile() file?: Express.Multer.File,
+    @CurrentUser() user?: any,
+  ) {
+    let proofPath: string | null = null;
+
+    if (file) {
+      proofPath = await this.storageService.uploadFile(file, transactionId, 'venezuela');
+    }
+
+    return this.transactionsService.updateTransactionPayment(transactionId, user, paymentMethod, proofPath);
+  }
+
   // Admin Colombia endpoints
   @Get('admin-colombia/pending')
   @Roles(UserRole.ADMIN_COLOMBIA)

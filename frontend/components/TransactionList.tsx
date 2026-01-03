@@ -15,6 +15,9 @@ interface TransactionListProps {
     onSelectTransaction?: (id: number) => void;
     onSelectAll?: () => void;
     showVendorPaymentMethod?: boolean;
+    showPaymentActions?: boolean;
+    onUnmarkPaid?: (transactionId: number) => void;
+    onEditPayment?: (transaction: Transaction) => void;
 }
 
 export default function TransactionList({
@@ -26,7 +29,10 @@ export default function TransactionList({
     selectedTransactions = [],
     onSelectTransaction,
     onSelectAll,
-    showVendorPaymentMethod = false
+    showVendorPaymentMethod = false,
+    showPaymentActions = false,
+    onUnmarkPaid,
+    onEditPayment
 }: TransactionListProps) {
 
     const formatCurrency = (amount: number) => {
@@ -121,6 +127,11 @@ export default function TransactionList({
                                     Comprobante
                                 </th>
                             )}
+                            {showPaymentActions && (
+                                <th className="px-4 lg:px-6 py-3 text-center text-xs md:text-sm font-medium text-gray-500 uppercase tracking-wider">
+                                    Acciones
+                                </th>
+                            )}
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -193,6 +204,28 @@ export default function TransactionList({
                                         ) : (
                                             <span className="text-gray-400 text-xs">-</span>
                                         )}
+                                    </td>
+                                )}
+                                {showPaymentActions && transaction.isPaidByVendor && (
+                                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-center space-x-2">
+                                        <button
+                                            onClick={() => onEditPayment && onEditPayment(transaction)}
+                                            className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                            title="Editar pago"
+                                        >
+                                            <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => onUnmarkPaid && onUnmarkPaid(transaction.id)}
+                                            className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                            title="Desmarcar como pagado"
+                                        >
+                                            <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
                                     </td>
                                 )}
                             </tr>
@@ -287,6 +320,23 @@ export default function TransactionList({
                                             </svg>
                                             Ver comprobante
                                         </a>
+                                    </div>
+                                )}
+
+                                {showPaymentActions && tx.isPaidByVendor && (
+                                    <div className="flex gap-2 mt-3">
+                                        <button
+                                            onClick={() => onEditPayment && onEditPayment(tx)}
+                                            className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 rounded text-xs font-medium hover:bg-blue-200"
+                                        >
+                                            Editar
+                                        </button>
+                                        <button
+                                            onClick={() => onUnmarkPaid && onUnmarkPaid(tx.id)}
+                                            className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200"
+                                        >
+                                            Desmarcar
+                                        </button>
                                     </div>
                                 )}
                             </div>

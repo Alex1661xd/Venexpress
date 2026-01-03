@@ -79,6 +79,26 @@ export const transactionsService = {
         return response.data;
     },
 
+    async unmarkAsPaid(transactionId: number): Promise<void> {
+        await api.post(`/transactions/unmark-as-paid/${transactionId}`);
+    },
+
+    async updatePayment(transactionId: number, paymentMethod?: string, proof?: File): Promise<void> {
+        const formData = new FormData();
+        if (paymentMethod) {
+            formData.append('paymentMethod', paymentMethod);
+        }
+        if (proof) {
+            formData.append('proof', proof);
+        }
+
+        await api.patch(`/transactions/update-payment/${transactionId}`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+
     // Admin Venezuela methods
     async getPendingVenezuela(): Promise<Transaction[]> {
         const response = await api.get<Transaction[]>('/transactions/pending-venezuela');

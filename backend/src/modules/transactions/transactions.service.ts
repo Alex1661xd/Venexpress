@@ -317,6 +317,71 @@ export class TransactionsService {
     return result.affected || 0;
   }
 
+  async unmarkTransactionAsPaid(transactionId: number, user: User): Promise<Transaction> {
+    if (user.role !== 'vendedor') {
+      throw new ForbiddenException('Solo los vendedores pueden desmarcar transacciones');
+    }
+
+    const transaction = await this.transactionsRepository.findOne({
+      where: {
+        id: transactionId,
+        createdBy: { id: user.id },
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transacción no encontrada');
+    }
+
+    if (!transaction.isPaidByVendor) {
+      throw new BadRequestException('Esta transacción no está marcada como pagada');
+    }
+
+    // Revertir los campos de pago del vendedor
+    transaction.isPaidByVendor = false;
+    transaction.paidByVendorAt = null;
+    transaction.vendorPaymentMethod = null;
+    transaction.vendorPaymentProofUrl = null;
+
+    return this.transactionsRepository.save(transaction);
+  }
+
+  async updateTransactionPayment(
+    transactionId: number,
+    user: User,
+    paymentMethod?: string,
+    proofPath?: string | null,
+  ): Promise<Transaction> {
+    if (user.role !== 'vendedor') {
+      throw new ForbiddenException('Solo los vendedores pueden actualizar el pago');
+    }
+
+    const transaction = await this.transactionsRepository.findOne({
+      where: {
+        id: transactionId,
+        createdBy: { id: user.id },
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transacción no encontrada');
+    }
+
+    if (!transaction.isPaidByVendor) {
+      throw new BadRequestException('Esta transacción no está marcada como pagada');
+    }
+
+    if (paymentMethod) {
+      transaction.vendorPaymentMethod = paymentMethod.toLowerCase() as any;
+    }
+
+    if (proofPath) {
+      transaction.vendorPaymentProofUrl = proofPath;
+    }
+
+    return this.transactionsRepository.save(transaction);
+  }
+
   private async createHistoryEntry(
     transactionId: number,
     status: TransactionStatus,

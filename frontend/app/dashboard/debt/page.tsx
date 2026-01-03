@@ -45,6 +45,12 @@ export default function DebtPage() {
         message: '',
         onConfirm: () => { }
     });
+    const [isEditPaymentModalOpen, setIsEditPaymentModalOpen] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [editPaymentMethod, setEditPaymentMethod] = useState<'efectivo' | 'consignacion_nequi' | 'consignacion_bancolombia' | ''>('');
+    const [editPaymentProof, setEditPaymentProof] = useState<File | null>(null);
+    const [editPaymentProofPreview, setEditPaymentProofPreview] = useState<string>('');
+    const [isUnmarking, setIsUnmarking] = useState(false);
 
     const fetchStats = async () => {
         try {
@@ -122,6 +128,88 @@ export default function DebtPage() {
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
+        });
+    };
+
+    const handleEditPayment = (transaction: Transaction) => {
+        setEditingTransaction(transaction);
+        setEditPaymentMethod(transaction.vendorPaymentMethod as any || '');
+        setEditPaymentProof(null);
+        setEditPaymentProofPreview('');
+        setIsEditPaymentModalOpen(true);
+    };
+
+    const handleEditPaymentProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setEditPaymentProof(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setEditPaymentProofPreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleConfirmEditPayment = async () => {
+        if (!editingTransaction) return;
+        if (!editPaymentMethod && !editPaymentProof) {
+            setAlertState({
+                isOpen: true,
+                message: 'Debes cambiar el método de pago o actualizar el comprobante',
+                variant: 'warning'
+            });
+            return;
+        }
+
+        try {
+            await transactionsService.updatePayment(editingTransaction.id, editPaymentMethod || undefined, editPaymentProof || undefined);
+            setAlertState({
+                isOpen: true,
+                message: 'Pago actualizado exitosamente',
+                variant: 'success'
+            });
+            setIsEditPaymentModalOpen(false);
+            setEditingTransaction(null);
+            setEditPaymentMethod('');
+            setEditPaymentProof(null);
+            setEditPaymentProofPreview('');
+            fetchTransactions();
+        } catch (error) {
+            setAlertState({
+                isOpen: true,
+                message: 'Error actualizando el pago',
+                variant: 'error'
+            });
+        }
+    };
+
+    const handleUnmarkPaid = (transactionId: number) => {
+        setConfirmState({
+            isOpen: true,
+            message: '¿Estás seguro de que deseas desmarcar esta transacción como pagada? Se perderá el registro del pago.',
+            onConfirm: async () => {
+                try {
+                    setIsUnmarking(true);
+                    await transactionsService.unmarkAsPaid(transactionId);
+                    setAlertState({
+                        isOpen: true,
+                        message: 'Transacción desmarcada exitosamente',
+                        variant: 'success'
+                    });
+                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
+                    fetchTransactions();
+                } catch (error) {
+                    setAlertState({
+                        isOpen: true,
+                        message: 'Error desmarcando la transacción',
+                        variant: 'error'
+                    });
+                    setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
+                } finally {
+                    setIsUnmarking(false);
+                }
+            }
         });
     };
 
@@ -468,6 +556,9 @@ export default function DebtPage() {
                     selectedTransactions={selectedTransactions}
                     onSelectTransaction={handleSelectTransaction}
                     onSelectAll={handleSelectAll}
+                    showPaymentActions={activeTab === 'paid'}
+                    onUnmarkPaid={handleUnmarkPaid}
+                    onEditPayment={handleEditPayment}
                 />
             </div>
 
@@ -676,6 +767,90 @@ export default function DebtPage() {
                 onConfirm={confirmState.onConfirm}
                 onCancel={() => setConfirmState({ isOpen: false, message: '', onConfirm: () => { } })}
             />
+
+            {/* Modal de edición de pago */}
+            <Modal
+                isOpen={isEditPaymentModalOpen}
+                onClose={() => {
+                    setIsEditPaymentModalOpen(false);
+                    setEditingTransaction(null);
+                    setEditPaymentMethod('');
+                    setEditPaymentProof(null);
+                    setEditPaymentProofPreview('');
+                }}
+                title="Editar Pago"
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Método de pago
+                        </label>
+                        <div className="space-y-2">
+                            {['efectivo', 'consignacion_nequi', 'consignacion_bancolombia'].map((method) => (
+                                <label key={method} className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        name="editPaymentMethod"
+                                        value={method}
+                                        checked={editPaymentMethod === method}
+                                        onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                                        className="mr-3"
+                                    />
+                                    <span className="text-sm text-gray-700">
+                                        {method === 'efectivo'
+                                            ? 'Efectivo'
+                                            : method === 'consignacion_nequi'
+                                            ? 'Nequi'
+                                            : 'Bancolombia'}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Comprobante de Pago (Opcional)
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleEditPaymentProofChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {editPaymentProofPreview && (
+                            <div className="mt-2">
+                                <img
+                                    src={editPaymentProofPreview}
+                                    alt="Preview"
+                                    className="max-h-40 rounded border border-gray-200"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                        <button
+                            onClick={() => {
+                                setIsEditPaymentModalOpen(false);
+                                setEditingTransaction(null);
+                                setEditPaymentMethod('');
+                                setEditPaymentProof(null);
+                                setEditPaymentProofPreview('');
+                            }}
+                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleConfirmEditPayment}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                        >
+                            Guardar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }
