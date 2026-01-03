@@ -175,14 +175,14 @@ export default function DebtPage() {
             onConfirm: async () => {
                 try {
                     if (isRangePayment) {
-                        const result = await transactionsService.markDateRangeAsPaid(rangeStartDate, rangeEndDate, paymentMethod);
+                        const result = await transactionsService.markDateRangeAsPaid(rangeStartDate, rangeEndDate, paymentMethod, paymentProof);
                         setAlertState({
                             isOpen: true,
                             message: `${result.affected || 0} transacción(es) marcada(s) como pagadas exitosamente`,
                             variant: 'success'
                         });
                     } else {
-                        await transactionsService.markAsPaid(pendingTransactionIds, paymentMethod);
+                        await transactionsService.markAsPaid(pendingTransactionIds, paymentMethod, paymentProof);
                         setAlertState({
                             isOpen: true,
                             message: 'Transacciones marcadas como pagadas exitosamente',
