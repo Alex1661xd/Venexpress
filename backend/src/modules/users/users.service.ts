@@ -6,6 +6,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionStatus } from '../../common/enums/transaction-status.enum';
+import { StorageService } from '../../common/services/storage.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class UsersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Transaction)
     private transactionsRepository: Repository<Transaction>,
+    private readonly storageService: StorageService,
   ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -189,8 +191,24 @@ export class UsersService {
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
+    // Generar URLs firmadas para los comprobantes de pago
+    const transactionsWithSignedUrls = await Promise.all(
+      data.map(async (tx) => {
+        if (tx.vendorPaymentProofUrl) {
+          try {
+            if (!tx.vendorPaymentProofUrl.startsWith('/uploads/')) {
+              tx.vendorPaymentProofUrl = await this.storageService.getSignedUrl(tx.vendorPaymentProofUrl);
+            }
+          } catch (error) {
+            console.error(`Error generating signed URL for transaction ${tx.id}:`, error);
+          }
+        }
+        return tx;
+      })
+    );
+
     return {
-      data,
+      data: transactionsWithSignedUrls,
       meta: {
         total,
         page: Number(page),
