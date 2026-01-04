@@ -188,7 +188,7 @@ export class TransactionsService {
       vendorPaymentProof = await this.storageService.uploadFile(file, 'temp', 'cliente');
     }
 
-    const transaction: Transaction = this.transactionsRepository.create({
+    const transaction = this.transactionsRepository.create({
       ...parsedDto,
       amountCOP,
       amountBs,
@@ -209,7 +209,7 @@ export class TransactionsService {
       beneficiaryIsPagoMovil: beneficiary.isPagoMovil || false,
 
       lastEditedAt: new Date(),
-    }) as Transaction;
+    });
 
     // Asociar cliente si es necesario
     if (user.role === UserRole.CLIENTE) {
