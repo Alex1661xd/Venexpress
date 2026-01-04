@@ -15,7 +15,7 @@ type PeriodType = 'today' | 'last15days' | 'thisMonth' | 'custom' | 'all';
 
 export default function DebtPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
 
     // 1. TODOS LOS ESTADOS (useState)
     const [totalDebt, setTotalDebt] = useState<number>(0);
@@ -111,28 +111,25 @@ export default function DebtPage() {
     
     // Auth Guard
     useEffect(() => {
-        if (user !== undefined) { 
-            console.log('Debug debt page - user:', user);
-            if (user === null) {
-                router.push('/login');
-                return;
-            }
-            
-            const isVendor = user.role === 'vendedor';
-            const isAdminColombia = user.adminId === 1 || user.adminId === undefined || user.adminId === null;
-            
-            console.log('Debug debt page - isVendor:', isVendor, 'isAdminColombia:', isAdminColombia, 'adminId:', user.adminId);
-            
-            if (!isVendor || !isAdminColombia) {
-                console.log('Debug: User does not have access, redirecting to dashboard');
-                // Usar un timeout pequeño para evitar conflictos de estado
-                const timer = setTimeout(() => {
-                    router.push('/dashboard');
-                }, 100);
-                return () => clearTimeout(timer);
-            }
+        // Esperar a que termine la carga antes de verificar autenticación
+        if (authLoading) return;
+        
+        if (!user) {
+            router.push('/login');
+            return;
         }
-    }, [user, router]);
+        
+        const isVendor = user.role === 'vendedor';
+        const isAdminColombia = user.adminId === 1 || user.adminId === undefined || user.adminId === null;
+        
+        if (!isVendor || !isAdminColombia) {
+            // Usar un timeout pequeño para evitar conflictos de estado
+            const timer = setTimeout(() => {
+                router.push('/dashboard');
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [user, authLoading, router]);
 
     // Fetch Stats Effect
     useEffect(() => {
@@ -368,12 +365,12 @@ export default function DebtPage() {
     // Aquí es donde deben ir los bloqueos de renderizado, DESPUÉS de todos los hooks.
 
     // Si el usuario aún no está cargado, mostrar página vacía (no renderear nada)
-    if (user === undefined) {
+    if (authLoading) {
         return null;
     }
 
     // Si el usuario no es válido (la redirección ocurre vía useEffect, pero evitamos render)
-    if (user === null || user.role !== 'vendedor' || (user.adminId !== 1 && user.adminId !== undefined && user.adminId !== null)) {
+    if (!user || user.role !== 'vendedor' || (user.adminId !== 1 && user.adminId !== undefined && user.adminId !== null)) {
          // Si es un usuario logueado pero sin rol, mostramos la UI de acceso denegado
         if (user && user.role !== 'vendedor') {
             return (

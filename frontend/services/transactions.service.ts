@@ -20,6 +20,15 @@ export const transactionsService = {
         return response.data;
     },
 
+    async createTransactionWithProof(formData: FormData): Promise<Transaction> {
+        const response = await api.post<Transaction>('/transactions/with-proof', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    },
+
     async getTransactionHistory(id: number): Promise<TransactionHistory[]> {
         const response = await api.get<TransactionHistory[]>(`/transactions/${id}/history`);
         return response.data;
@@ -105,10 +114,13 @@ export const transactionsService = {
         return response.data;
     },
 
-    async completeTransfer(id: number, voucher?: File): Promise<Transaction> {
+    async completeTransfer(id: number, voucher?: File, accountId?: number): Promise<Transaction> {
         const formData = new FormData();
         if (voucher) {
             formData.append('voucher', voucher);
+        }
+        if (accountId) {
+            formData.append('accountId', accountId.toString());
         }
         const response = await api.post<Transaction>(`/transactions/${id}/complete`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },

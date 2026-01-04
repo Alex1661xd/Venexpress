@@ -47,20 +47,34 @@ export default function VendorPaymentsPage() {
     try {
       setLoading(true);
       
+      console.log('🔍 loadTransactions called', { userRole: user?.role, filters });
+      
+      // Validate and convert vendorId to number if provided
+      let vendorIdNumber: number | undefined = undefined;
+      if (filters.vendorId && filters.vendorId.trim() !== '') {
+        const parsed = Number(filters.vendorId);
+        if (!isNaN(parsed) && parsed > 0) {
+          vendorIdNumber = parsed;
+        }
+      }
+      
       // Call appropriate service method based on admin role
+      console.log('🔍 About to call service, user role is:', user?.role);
       const data = user?.role === 'admin_colombia'
         ? await transactionsService.getHistoryAdminColombia(
             'completado',
             filters.startDate,
             filters.endDate,
-            filters.vendorId ? Number(filters.vendorId) : undefined,
+            vendorIdNumber,
           )
         : await transactionsService.getHistoryAdminVenezuela(
             'completado',
             filters.startDate,
             filters.endDate,
-            filters.vendorId ? Number(filters.vendorId) : undefined,
+            vendorIdNumber,
           );
+      
+      console.log('🔍 Received data:', data.length, 'transactions');
 
       // Filtrar transacciones pendientes de pago de comisión
       const pendingPayment = data.filter(
@@ -107,8 +121,9 @@ export default function VendorPaymentsPage() {
 
   const getCommission = (tx: Transaction) => {
     const cop = Number(tx.amountCOP) || 0;
-    // Use dynamic commission from user, fallback to admin role default
-    const commissionRate = user?.commission || (user?.role === 'admin_colombia' ? 0.02 : 0.05);
+    // Use commission from the vendor who created the transaction, not the admin viewing the page
+    const vendorCommission = (tx.createdBy as any)?.commission;
+    const commissionRate = vendorCommission ? vendorCommission / 100 : (user?.role === 'admin_colombia' ? 0.02 : 0.05);
     return cop * commissionRate;
   };
 

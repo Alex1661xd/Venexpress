@@ -42,6 +42,12 @@ export class UsersController {
     return this.usersService.createVendor(createVendorDto, adminId);
   }
 
+  @Patch('vendors/:id')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  updateVendor(@Param('id') id: string, @Body() updateData: { email?: string; password?: string }, @CurrentUser('id') adminId: number) {
+    return this.usersService.updateVendor(+id, updateData, adminId);
+  }
+
   @Get(':id/debt-details')
   @Roles(UserRole.ADMIN_COLOMBIA)
   getDebtDetails(@Param('id') id: string, @Query() query: any) {
@@ -101,6 +107,12 @@ export class UsersController {
   createVendorVenezuela(@Body() createVendorDto: any) {
     const ADMIN_VENEZUELA_ID = 2; // ID fijo del admin de Venezuela
     return this.usersService.createVendor({ ...createVendorDto, commission: 5 }, ADMIN_VENEZUELA_ID);
+  }
+
+  @Patch('venezuela/vendors/:id')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  updateVendorVenezuela(@Param('id') id: string, @Body() updateData: { email?: string; password?: string }) {
+    return this.usersService.updateVendorVenezuela(+id, updateData);
   }
 
   @Post('venezuela/commission/mark-paid')

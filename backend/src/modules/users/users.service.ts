@@ -117,6 +117,73 @@ export class UsersService {
     return this.usersRepository.save(vendor);
   }
 
+  async updateVendor(vendorId: number, updateData: { email?: string; password?: string }, adminId?: number): Promise<User> {
+    const vendor = await this.findOne(vendorId);
+    
+    if (vendor.role !== 'vendedor') {
+      throw new Error('El usuario no es un vendedor');
+    }
+
+    // Si se proporciona adminId, verificar que el vendedor pertenezca a ese admin o sea legacy (adminId null/undefined)
+    if (adminId !== undefined) {
+      const ADMIN_COLOMBIA_ID = 1;
+      if (adminId === ADMIN_COLOMBIA_ID) {
+        // Admin Colombia puede editar vendedores con adminId = 1 o adminId null/undefined (legacy)
+        if (vendor.adminId !== null && vendor.adminId !== undefined && vendor.adminId !== ADMIN_COLOMBIA_ID) {
+          throw new Error('No tienes permisos para editar este vendedor');
+        }
+      }
+    }
+
+    if (updateData.email) {
+      // Verificar que el email no esté en uso por otro usuario
+      const existingUser = await this.usersRepository.findOne({
+        where: { email: updateData.email },
+      });
+      if (existingUser && existingUser.id !== vendorId) {
+        throw new Error('El correo electrónico ya está en uso');
+      }
+      vendor.email = updateData.email;
+    }
+
+    if (updateData.password) {
+      vendor.password = await bcrypt.hash(updateData.password, 10);
+    }
+
+    return this.usersRepository.save(vendor);
+  }
+
+  async updateVendorVenezuela(vendorId: number, updateData: { email?: string; password?: string }): Promise<User> {
+    const ADMIN_VENEZUELA_ID = 2;
+    const vendor = await this.findOne(vendorId);
+    
+    if (vendor.role !== 'vendedor') {
+      throw new Error('El usuario no es un vendedor');
+    }
+
+    // Verificar que el vendedor pertenezca a admin_venezuela
+    if (vendor.adminId !== ADMIN_VENEZUELA_ID) {
+      throw new Error('No tienes permisos para editar este vendedor');
+    }
+
+    if (updateData.email) {
+      // Verificar que el email no esté en uso por otro usuario
+      const existingUser = await this.usersRepository.findOne({
+        where: { email: updateData.email },
+      });
+      if (existingUser && existingUser.id !== vendorId) {
+        throw new Error('El correo electrónico ya está en uso');
+      }
+      vendor.email = updateData.email;
+    }
+
+    if (updateData.password) {
+      vendor.password = await bcrypt.hash(updateData.password, 10);
+    }
+
+    return this.usersRepository.save(vendor);
+  }
+
   async changeUserRole(id: number, newRole: string): Promise<User> {
     const user = await this.findOne(id);
     user.role = newRole as any;

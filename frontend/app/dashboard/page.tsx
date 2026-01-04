@@ -97,11 +97,12 @@ export default function DashboardPage() {
                 const today = getLocalDateString();
                 const transactions = await transactionsService.getTransactions(100, 0, today, today);
 
-                // Calcular ganancias de hoy con comisión dinámica
+                // Calcular ganancias de hoy con comisión dinámica (usando transactionCommission)
                 const completedToday = transactions.filter(t => t.status === 'completado');
-                const commissionRate = (user?.commission || 2) / 100;
                 const todayEarningsCalc = completedToday.reduce((sum, t) => {
                     const copValue = parseFloat(t.amountCOP?.toString() || '0');
+                    // Usar la comisión específica de la transacción, fallback al commission del usuario
+                    const commissionRate = (t.transactionCommission || user?.commission || 2) / 100;
                     return sum + (copValue * commissionRate);
                 }, 0);
 
@@ -192,7 +193,7 @@ export default function DashboardPage() {
                                         ? 'Admin Colombia' 
                                         : user?.role === 'admin_venezuela' 
                                         ? 'Admin Venezuela' 
-                                        : 'Comisión (2%)'}
+                                        : 'Comisión (5%)'}
                                 </p>
                             </div>
                             <svg className="w-20 h-20 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
