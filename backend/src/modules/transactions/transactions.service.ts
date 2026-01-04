@@ -209,7 +209,7 @@ export class TransactionsService {
       beneficiaryIsPagoMovil: beneficiary.isPagoMovil || false,
 
       lastEditedAt: new Date(),
-    });
+    }) as unknown as Transaction;
 
     // Asociar cliente si es necesario
     if (user.role === UserRole.CLIENTE) {
