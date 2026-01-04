@@ -319,62 +319,73 @@ export default function AccountsPage() {
       </div>
 
       {/* Recent Transactions */}
-      {summary.recentTransactions.length > 0 && (
-        <Card>
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Historial Reciente</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cuenta</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo Resultante</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {summary.recentTransactions.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
-                      {new Date(transaction.createdAt).toLocaleString('es-CO', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-gray-900 font-medium">
-                      {transaction.account.name}
-                    </td>
-                    <td className="px-4 py-3">
-                      {transaction.type === 'deposit' ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ↑ Depósito
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          ↓ Retiro
-                        </span>
-                      )}
-                    </td>
-                    <td className={`px-4 py-3 text-right font-bold ${transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
-                      {transaction.type === 'deposit' ? '+' : '-'}{formatCurrency(transaction.amount)} Bs
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {transaction.description}
-                      {transaction.transaction && (
-                        <span className="ml-2 text-blue-600">
-                          (Transacción #{transaction.transaction.id})
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">
-                      {formatCurrency(transaction.balanceAfter)} Bs
-                    </td>
+      {summary.recentTransactions.length > 0 && (() => {
+        const totalPages = Math.ceil(summary.recentTransactions.length / itemsPerPage);
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const paginatedTransactions = summary.recentTransactions.slice(startIndex, endIndex);
+
+        return (
+          <Card>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+              <h2 className="text-xl font-bold text-gray-900">Historial Reciente</h2>
+              <div className="text-sm text-gray-600">
+                Mostrando {startIndex + 1} - {Math.min(endIndex, summary.recentTransactions.length)} de {summary.recentTransactions.length} transacciones
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cuenta</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo Resultante</th>
                   </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                        {new Date(transaction.createdAt).toLocaleString('es-CO', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-gray-900 font-medium">
+                        {transaction.account.name}
+                      </td>
+                      <td className="px-4 py-3">
+                        {transaction.type === 'deposit' ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ↑ Depósito
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            ↓ Retiro
+                          </span>
+                        )}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
+                        {transaction.type === 'deposit' ? '+' : '-'}{formatCurrency(transaction.amount)} Bs
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {transaction.description}
+                        {transaction.transaction && (
+                          <span className="ml-2 text-blue-600">
+                            (Transacción #{transaction.transaction.id})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(transaction.balanceAfter)} Bs
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>

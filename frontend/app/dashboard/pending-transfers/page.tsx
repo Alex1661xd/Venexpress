@@ -779,10 +779,10 @@ export default function PendingTransfersPage() {
                         {isAdminVenezuela && accounts.length > 0 && (
                             <div className="p-4 bg-purple-50 border-2 border-purple-200 rounded-xl">
                                 <label className="block text-sm font-bold text-purple-900 mb-3">
-                                    💰 ¿De qué cuenta sacaste el dinero? (Opcional)
+                                    💰 ¿De qué cuenta sacaste el dinero? *
                                 </label>
                                 <p className="text-xs text-purple-700 mb-3">
-                                    Si seleccionas una cuenta, el sistema restará automáticamente {selectedTransaction.amountBs} Bs de su saldo.
+                                    <strong>Obligatorio:</strong> Debes seleccionar una cuenta. El sistema restará automáticamente {selectedTransaction.amountBs} Bs de su saldo.
                                 </p>
                                 <div className="grid grid-cols-1 gap-2">
                                     {accounts.map((account) => (

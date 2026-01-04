@@ -1,12 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useEarningsPassword } from '@/hooks/useEarningsPassword';
+import EarningsPasswordModal from '@/components/EarningsPasswordModal';
 import { transactionsService } from '@/services/transactions.service';
 import { getLocalDateString, getFirstDayOfMonth } from '@/utils/date';
 
 export default function VenezuelaEarningsPage() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const earningsPassword = useEarningsPassword();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<any>(null);
   const [startDate, setStartDate] = useState(() => getLocalDateString());
@@ -15,10 +20,24 @@ export default function VenezuelaEarningsPage() {
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
 
   useEffect(() => {
-    if (user?.role === 'admin_venezuela') {
+    if (authLoading) return;
+    
+    if (!user || user.role !== 'admin_venezuela') {
+      router.push('/dashboard');
+      return;
+    }
+
+    // Si no está autenticado, mostrar el modal
+    if (!earningsPassword.isAuthenticated) {
+      earningsPassword.openAuthModal();
+    }
+  }, [user, authLoading, router, earningsPassword.isAuthenticated]);
+
+  useEffect(() => {
+    if (user?.role === 'admin_venezuela' && earningsPassword.isAuthenticated) {
       loadData();
     }
-  }, [user, startDate, endDate]);
+  }, [user, startDate, endDate, earningsPassword.isAuthenticated]);
 
   const loadData = async () => {
     try {
@@ -47,7 +66,37 @@ export default function VenezuelaEarningsPage() {
     setShowToday(false);
   };
 
-  if (loading) {
+  // Si no está autenticado, no mostrar el contenido
+  if (!earningsPassword.isAuthenticated) {
+    return (
+      <>
+        <div className="p-4 sm:p-6 lg:p-8">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <svg className="w-24 h-24 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Restringido</h2>
+              <p className="text-gray-600 mb-4">Esta sección requiere autenticación</p>
+              <button
+                onClick={earningsPassword.openAuthModal}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Ingresar Contraseña
+              </button>
+            </div>
+          </div>
+        </div>
+        <EarningsPasswordModal
+          isOpen={earningsPassword.showModal}
+          onClose={earningsPassword.closeAuthModal}
+          onAuthenticate={earningsPassword.authenticate}
+        />
+      </>
+    );
+  }
+
+  if (loading || authLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="animate-pulse space-y-4">
@@ -539,6 +588,11 @@ export default function VenezuelaEarningsPage() {
           )}
         </>
       )}
+      <EarningsPasswordModal
+        isOpen={earningsPassword.showModal}
+        onClose={earningsPassword.closeAuthModal}
+        onAuthenticate={earningsPassword.authenticate}
+      />
     </div>
   );
 }
