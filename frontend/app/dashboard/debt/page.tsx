@@ -250,6 +250,9 @@ export default function DebtPage() {
                 } finally {
                     setIsUnmarking(false);
                 }
+            },
+            onCancel: () => {
+                setConfirmState({ isOpen: false, title: '', message: '', onConfirm: () => { }, onCancel: () => { } });
             }
         });
     };
@@ -333,6 +336,9 @@ export default function DebtPage() {
                         variant: 'error'
                     });
                 }
+            },
+            onCancel: () => {
+                setConfirmState({ isOpen: false, title: '', message: '', onConfirm: () => { }, onCancel: () => { } });
             }
         });
     };
