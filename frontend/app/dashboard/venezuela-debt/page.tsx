@@ -117,10 +117,12 @@ export default function VenezuelaDebtPage() {
 
   const handlePayFull = () => {
     if (!debtSummary) return;
+    // Usar la fecha final del rango seleccionado como fecha de pago
+    const paymentDate = filters.endDate || getLocalDateString();
     setPaymentForm({
       amount: debtSummary.pendingDebt.toString(),
       notes: 'Pago completo de deuda',
-      paymentDate: getLocalDateString(),
+      paymentDate: paymentDate,
     });
     setPaymentProof(null);
     setPaymentProofPreview('');

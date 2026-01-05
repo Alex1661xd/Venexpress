@@ -2611,13 +2611,13 @@ export class TransactionsService {
       });
     });
 
-    // Obtener pagos realizados en el período
+    // Obtener pagos realizados en el período (filtrar por paymentDate, no por createdAt)
     const payments = await this.venezuelaPaymentsRepository.find({
       where: {
-        createdAt: Between(dateFrom, dateTo),
+        paymentDate: Between(dateFrom, dateTo),
       },
       relations: ['createdBy'],
-      order: { createdAt: 'DESC' },
+      order: { paymentDate: 'DESC' },
     });
 
     const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
