@@ -89,6 +89,12 @@ export class Transaction {
   @Column({ nullable: true, name: 'vendor_payment_proof' })
   vendorPaymentProof: string; // URL del comprobante de pago inicial del vendedor (para vendedores de Venezuela)
 
+  @Column({ type: 'boolean', default: false, name: 'vendor_payment_proof_verified' })
+  vendorPaymentProofVerified: boolean; // Indica si el comprobante del vendedor fue verificado por admin venezuela
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'vendor_payment_proof_verified_at' })
+  vendorPaymentProofVerifiedAt: Date; // Fecha en que se verificó el comprobante
+
   @Column('text', { nullable: true })
   notes: string;
 

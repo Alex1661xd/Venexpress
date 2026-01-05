@@ -471,10 +471,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         // Si el item solo debe mostrarse a vendedores de admin_colombia
         if (item.showOnlyForAdminColombiaVendors) {
-            // Solo mostrar si es vendedor Y (adminId es 1, null o undefined)
+            // Solo mostrar si es vendedor Y (adminId es 1, null, undefined o 2 para admin venezuela)
             if (user.role === 'vendedor') {
                 const isAdminColombiaVendor = user.adminId === 1 || user.adminId === null || user.adminId === undefined;
-                return isAdminColombiaVendor;
+                const isAdminVenezuelaVendor = user.adminId === 2;
+                return isAdminColombiaVendor || isAdminVenezuelaVendor;
             }
             return false;
         }

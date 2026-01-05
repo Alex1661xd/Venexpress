@@ -224,7 +224,7 @@ export default function VendorsPage() {
                             )}
 
                             <div className="flex gap-2">
-                                {user?.role === 'admin_colombia' && (
+                                {(user?.role === 'admin_colombia' || user?.role === 'admin_venezuela') && (
                                     <Link href={`/dashboard/vendors/${vendor.id}`} className="flex-1">
                                         <button className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
                                             Ver Detalles
@@ -233,7 +233,7 @@ export default function VendorsPage() {
                                 )}
                                 <button
                                     onClick={() => handleEditVendor(vendor)}
-                                    className={`py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium ${user?.role === 'admin_colombia' ? 'flex-1' : 'w-full'}`}
+                                    className={`py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium ${(user?.role === 'admin_colombia' || user?.role === 'admin_venezuela') ? 'flex-1' : 'w-full'}`}
                                 >
                                     Editar
                                 </button>

@@ -49,13 +49,13 @@ export class UsersController {
   }
 
   @Get(':id/debt-details')
-  @Roles(UserRole.ADMIN_COLOMBIA)
+  @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA)
   getDebtDetails(@Param('id') id: string, @Query() query: any) {
     return this.usersService.getVendorDebtDetails(+id, query);
   }
 
   @Get(':id/transactions')
-  @Roles(UserRole.ADMIN_COLOMBIA)
+  @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA)
   getVendorTransactions(@Param('id') id: string, @Query() query: any) {
     return this.usersService.getVendorTransactions(+id, query);
   }

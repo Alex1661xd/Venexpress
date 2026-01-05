@@ -218,6 +218,15 @@ export class TransactionsService {
       transaction.clientPresencial = { id: parsedDto.clientPresencialId } as any;
     }
 
+    // Si tiene comprobante, marcar como pagado; si no, queda como deuda
+    if (file && vendorPaymentProof) {
+      transaction.isPaidByVendor = true;
+      transaction.paidByVendorAt = new Date();
+    } else {
+      transaction.isPaidByVendor = false;
+      transaction.paidByVendorAt = null;
+    }
+
     const savedTransaction = await this.transactionsRepository.save(transaction);
 
     // Actualizar la ruta del comprobante con el ID real de la transacción
@@ -228,10 +237,14 @@ export class TransactionsService {
     }
 
     // Crear entrada en historial
+    const historyMessage = file && vendorPaymentProof 
+      ? 'Transacción creada con comprobante de pago (marcada como pagada)'
+      : 'Transacción creada sin comprobante de pago (pendiente de pago)';
+    
     await this.createHistoryEntry(
       savedTransaction.id,
       TransactionStatus.PENDIENTE,
-      'Transacción creada con comprobante de pago',
+      historyMessage,
       user.id,
     );
 
@@ -929,6 +942,11 @@ export class TransactionsService {
       throw new BadRequestException('Solo se pueden completar transacciones en estado pendiente_venezuela');
     }
 
+    // Si tiene comprobante del vendedor, debe estar verificado antes de completar
+    if (transaction.vendorPaymentProof && !transaction.vendorPaymentProofVerified) {
+      throw new BadRequestException('El comprobante del vendedor debe ser verificado antes de completar la transferencia');
+    }
+
     // Si se proporciona accountId, restar el saldo de la cuenta
     if (accountId) {
       const amountBs = parseFloat(transaction.amountBs.toString());
@@ -954,6 +972,38 @@ export class TransactionsService {
       accountId 
         ? 'Transferencia completada por administrador Venezuela con retiro de cuenta'
         : 'Transferencia completada por administrador Venezuela',
+      user.id,
+    );
+
+    return updated;
+  }
+
+  async verifyVendorPaymentProof(id: number, user: any): Promise<Transaction> {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transacción con ID ${id} no encontrada`);
+    }
+
+    if (!transaction.vendorPaymentProof) {
+      throw new BadRequestException('Esta transacción no tiene comprobante del vendedor para verificar');
+    }
+
+    if (transaction.vendorPaymentProofVerified) {
+      throw new BadRequestException('El comprobante ya fue verificado anteriormente');
+    }
+
+    transaction.vendorPaymentProofVerified = true;
+    transaction.vendorPaymentProofVerifiedAt = new Date();
+
+    const updated = await this.transactionsRepository.save(transaction);
+
+    await this.createHistoryEntry(
+      id,
+      transaction.status,
+      'Comprobante del vendedor verificado como correcto',
       user.id,
     );
 

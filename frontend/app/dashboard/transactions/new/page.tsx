@@ -242,9 +242,8 @@ export default function NewTransactionPage() {
 
         // Validación diferente según tipo de vendedor
         if (isVendorVenezuela) {
-            if (!paymentProof) {
-                newErrors.paymentProof = 'Debes adjuntar el comprobante de pago';
-            }
+            // El comprobante es opcional para vendedores de Venezuela
+            // Si no se adjunta, la transferencia quedará como deuda
         } else {
             if (!formData.confirmedReceipt) {
                 newErrors.confirmedReceipt = 'Debes confirmar que recibiste el dinero';
@@ -289,8 +288,8 @@ export default function NewTransactionPage() {
 
         setSaving(true);
         try {
-            // Si es vendedor de Venezuela, usar FormData para incluir el archivo
-            if (isVendorVenezuela && paymentProof) {
+            // Si es vendedor de Venezuela, usar FormData (incluso si no hay archivo)
+            if (isVendorVenezuela) {
                 const formDataToSend = new FormData();
                 formDataToSend.append('beneficiaryId', formData.beneficiaryId);
                 formDataToSend.append('clientPresencialId', formData.clientPresencialId);
@@ -306,7 +305,10 @@ export default function NewTransactionPage() {
                 if (useCustomRate && customRate) {
                     formDataToSend.append('customRate', customRate);
                 }
-                formDataToSend.append('paymentProof', paymentProof);
+                // Solo agregar el archivo si existe
+                if (paymentProof) {
+                    formDataToSend.append('paymentProof', paymentProof);
+                }
 
                 await transactionsService.createTransactionWithProof(formDataToSend);
             } else {
@@ -787,10 +789,10 @@ export default function NewTransactionPage() {
                                 {isVendorVenezuela ? (
                                     // Para vendedores de Venezuela: subir comprobante
                                     <div>
-                                        <h2 className="text-xl font-bold text-gray-900 mb-4">Comprobante de Pago *</h2>
+                                        <h2 className="text-xl font-bold text-gray-900 mb-4">Comprobante de Pago (Opcional)</h2>
                                         <div className={`p-4 rounded-xl border-2 transition-all ${errors.paymentProof ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
                                             <p className="text-sm text-gray-600 mb-4">
-                                                Adjunta el comprobante de pago que recibiste del cliente. Este será visible para el administrador de Venezuela.
+                                                Adjunta el comprobante de pago que recibiste del cliente. Si lo adjuntas, la transferencia se marcará como pagada y no aumentará tu deuda. Si no lo adjuntas, deberás esta transferencia y aparecerá en tu panel de deudas. Este será visible para el administrador de Venezuela.
                                             </p>
                                             
                                             <input

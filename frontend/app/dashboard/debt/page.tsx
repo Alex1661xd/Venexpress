@@ -120,9 +120,11 @@ export default function DebtPage() {
         }
         
         const isVendor = user.role === 'vendedor';
+        // Permitir acceso a vendedores de admin colombia (adminId 1, undefined, null) y admin venezuela (adminId 2)
         const isAdminColombia = user.adminId === 1 || user.adminId === undefined || user.adminId === null;
+        const isAdminVenezuela = user.adminId === 2;
         
-        if (!isVendor || !isAdminColombia) {
+        if (!isVendor || (!isAdminColombia && !isAdminVenezuela)) {
             // Usar un timeout pequeño para evitar conflictos de estado
             const timer = setTimeout(() => {
                 router.push('/dashboard');
@@ -376,7 +378,11 @@ export default function DebtPage() {
     }
 
     // Si el usuario no es válido (la redirección ocurre vía useEffect, pero evitamos render)
-    if (!user || user.role !== 'vendedor' || (user.adminId !== 1 && user.adminId !== undefined && user.adminId !== null)) {
+    const isVendor = user?.role === 'vendedor';
+    const isAdminColombiaVendor = user?.adminId === 1 || user?.adminId === undefined || user?.adminId === null;
+    const isAdminVenezuelaVendor = user?.adminId === 2;
+    
+    if (!user || !isVendor || (!isAdminColombiaVendor && !isAdminVenezuelaVendor)) {
          // Si es un usuario logueado pero sin rol, mostramos la UI de acceso denegado
         if (user && user.role !== 'vendedor') {
             return (

@@ -26,7 +26,7 @@ export default function VendorDetailsPage() {
 
     useEffect(() => {
         if (authLoading) return;
-        if (!user || user.role !== 'admin_colombia') {
+        if (!user || (user.role !== 'admin_colombia' && user.role !== 'admin_venezuela')) {
             router.push('/dashboard');
             return;
         }

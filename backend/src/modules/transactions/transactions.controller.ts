@@ -356,6 +356,15 @@ export class TransactionsController {
     return this.transactionsService.completeTransfer(+id, voucherPath, accountId ? +accountId : null, user);
   }
 
+  @Post(':id/verify-vendor-proof')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  async verifyVendorPaymentProof(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.verifyVendorPaymentProof(+id, user);
+  }
+
   @Post(':id/update-voucher')
   @Roles(UserRole.ADMIN_VENEZUELA)
   @UseInterceptors(

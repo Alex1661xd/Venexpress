@@ -61,6 +61,8 @@ export interface Transaction {
     vendorPaymentMethod?: 'efectivo' | 'consignacion_nequi' | 'consignacion_bancolombia';
     vendorPaymentProofUrl?: string; // URL del comprobante de pago del vendedor
     vendorPaymentProof?: string; // URL del comprobante de pago inicial del vendedor (para vendedores de Venezuela)
+    vendorPaymentProofVerified?: boolean; // Indica si el comprobante del vendedor fue verificado por admin venezuela
+    vendorPaymentProofVerifiedAt?: string; // Fecha en que se verificó el comprobante
     isCommissionPaidToVendor?: boolean;
     commissionPaidAt?: string;
     hasCustomRate?: boolean; // Indica si el vendedor usó una tasa personalizada

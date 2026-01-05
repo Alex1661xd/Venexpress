@@ -128,6 +128,11 @@ export const transactionsService = {
         return response.data;
     },
 
+    async verifyVendorPaymentProof(id: number): Promise<Transaction> {
+        const response = await api.post<Transaction>(`/transactions/${id}/verify-vendor-proof`);
+        return response.data;
+    },
+
     async rejectTransfer(id: number, reason: string, voucher?: File): Promise<Transaction> {
         const formData = new FormData();
         formData.append('reason', reason);

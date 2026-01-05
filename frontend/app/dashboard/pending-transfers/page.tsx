@@ -202,6 +202,27 @@ export default function PendingTransfersPage() {
         }
     };
 
+    const handleVerifyVendorProof = async (transaction: Transaction) => {
+        setProcessing(true);
+        try {
+            await transactionsService.verifyVendorPaymentProof(transaction.id);
+            setAlertState({
+                isOpen: true,
+                message: 'Comprobante marcado como correcto',
+                variant: 'success'
+            });
+            await loadTransactions();
+        } catch (error: any) {
+            setAlertState({
+                isOpen: true,
+                message: error.response?.data?.message || 'Error al verificar el comprobante',
+                variant: 'error'
+            });
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     const handleReject = async () => {
         if (!selectedTransaction || !rejectReason) {
             setAlertState({
@@ -309,6 +330,7 @@ export default function PendingTransfersPage() {
         text += `Beneficiario: ${tx.beneficiaryFullName}\n`;
         text += `Cédula: ${tx.beneficiaryDocumentId}\n`;
         text += `Banco: ${tx.beneficiaryBankName}\n`;
+        
 
         if (isPagoMovil) {
             text += `Teléfono (Pago Móvil): ${tx.beneficiaryPhone}\n`;
@@ -324,8 +346,8 @@ export default function PendingTransfersPage() {
 
         text += `\nTasa: ${rate}\n`;
         text += `Monto COP: ${amountCOP}\n`;
-        text += `Monto Bs: ${amountBs}`;
-
+        text += `Monto Bs: ${amountBs}\n`;
+        text += `Vendedor: ${tx.createdBy?.name || 'N/A'}`;
         navigator.clipboard.writeText(text).then(() => {
             setAlertState({
                 isOpen: true,
@@ -450,15 +472,28 @@ export default function PendingTransfersPage() {
                                             TASA PERSONALIZADA
                                         </div>
                                     )}
-                                    <button
-                                        onClick={() => handleCopyToClipboard(transaction)}
-                                        className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all z-10"
-                                        title="Copiar datos"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                        </svg>
-                                    </button>
+                                    {(() => {
+                                        const hasVendorProof = isAdminVenezuela && isVendorVenezuela && transaction.vendorPaymentProof;
+                                        const isProofVerified = transaction.vendorPaymentProofVerified;
+                                        const canCopy = !hasVendorProof || isProofVerified;
+                                        
+                                        return (
+                                            <button
+                                                onClick={() => canCopy && handleCopyToClipboard(transaction)}
+                                                disabled={!canCopy}
+                                                className={`absolute top-2 right-2 sm:top-4 sm:right-4 p-2 rounded-lg transition-all z-10 ${
+                                                    canCopy 
+                                                        ? 'text-gray-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer' 
+                                                        : 'text-gray-300 cursor-not-allowed opacity-50'
+                                                }`}
+                                                title={canCopy ? "Copiar datos" : "Debe verificar el comprobante antes de copiar"}
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                </svg>
+                                            </button>
+                                        );
+                                    })()}
                                     {isCustomRate && (
                                         <div className="mb-3 p-3 bg-purple-100 border border-purple-300 rounded-lg">
                                             <div className="flex items-start gap-2">
@@ -522,16 +557,32 @@ export default function PendingTransfersPage() {
                                                         Ver Comprobante
                                                     </Button>
                                                 )}
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => openCompleteModal(transaction)}
-                                                    className="bg-green-600 hover:bg-green-700"
-                                                >
-                                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                    Completar
-                                                </Button>
+                                                {/* Si tiene comprobante pero no está verificado, mostrar botón "Comprobante Correcto" */}
+                                                {isAdminVenezuela && isVendorVenezuela && hasVendorProof && !transaction.vendorPaymentProofVerified ? (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleVerifyVendorProof(transaction)}
+                                                        disabled={processing}
+                                                        className="bg-blue-600 hover:bg-blue-700"
+                                                    >
+                                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        Comprobante Correcto
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => openCompleteModal(transaction)}
+                                                        disabled={isAdminVenezuela && isVendorVenezuela && hasVendorProof && !transaction.vendorPaymentProofVerified}
+                                                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                                    >
+                                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Completar
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -637,7 +688,11 @@ export default function PendingTransfersPage() {
                 title="Completar Transferencia"
                 size="lg"
             >
-                {selectedTransaction && (
+                {selectedTransaction && (() => {
+                    const isVendorVenezuela = selectedTransaction.createdBy?.adminId === 2;
+                    const hasVendorProof = !!selectedTransaction.vendorPaymentProof;
+                    
+                    return (
                     <div className="space-y-6">
                         {/* Header */}
                         <div className="flex items-center justify-between pb-4 border-b border-gray-200">
@@ -678,9 +733,25 @@ export default function PendingTransfersPage() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleCopyToClipboard(selectedTransaction)}
-                                    className="text-blue-600 border-blue-200 hover:bg-blue-50 py-1"
-                                    title="Copiar datos al portapapeles"
+                                    onClick={() => {
+                                        const hasVendorProof = isAdminVenezuela && isVendorVenezuela && selectedTransaction.vendorPaymentProof;
+                                        const isProofVerified = selectedTransaction.vendorPaymentProofVerified;
+                                        const canCopy = !hasVendorProof || isProofVerified;
+                                        if (canCopy) {
+                                            handleCopyToClipboard(selectedTransaction);
+                                        }
+                                    }}
+                                    disabled={!!(isAdminVenezuela && isVendorVenezuela && selectedTransaction.vendorPaymentProof && !selectedTransaction.vendorPaymentProofVerified)}
+                                    className={`text-blue-600 border-blue-200 hover:bg-blue-50 py-1 ${
+                                        isAdminVenezuela && isVendorVenezuela && selectedTransaction.vendorPaymentProof && !selectedTransaction.vendorPaymentProofVerified
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : ''
+                                    }`}
+                                    title={
+                                        isAdminVenezuela && isVendorVenezuela && selectedTransaction.vendorPaymentProof && !selectedTransaction.vendorPaymentProofVerified
+                                            ? "Debe verificar el comprobante antes de copiar"
+                                            : "Copiar datos al portapapeles"
+                                    }
                                 >
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
@@ -858,7 +929,8 @@ export default function PendingTransfersPage() {
                             </Button>
                         </div>
                     </div>
-                )}
+                    );
+                })()}
             </Modal>
 
             {/* Reject Modal */}
