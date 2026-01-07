@@ -8,11 +8,20 @@
  * 4. Beneficiarios asociados directamente al vendedor (userApp)
  * 5. Clientes del vendedor
  * 6. El vendedor mismo
+ * 7. OPCIONAL: Resetear la secuencia de IDs (con flag --reset-sequence)
  * 
  * USO:
- * npm run script:delete-vendor <vendor-id>
+ * npm run script:delete-vendor <vendor-id> [--reset-sequence]
  * o
- * ts-node -r tsconfig-paths/register scripts/delete-vendor.ts <vendor-id>
+ * ts-node -r tsconfig-paths/register scripts/delete-vendor.ts <vendor-id> [--reset-sequence]
+ * 
+ * FLAGS:
+ * --reset-sequence: Resetea la secuencia de auto-incremento para reutilizar IDs eliminados
+ *                   ⚠️  NO RECOMENDADO en producción por razones de integridad
+ * 
+ * EJEMPLOS:
+ * npm run script:delete-vendor 5                    # Eliminar vendedor sin resetear secuencia
+ * npm run script:delete-vendor 5 --reset-sequence   # Eliminar y resetear secuencia
  */
 
 import { DataSource } from 'typeorm';
@@ -70,8 +79,12 @@ const AppDataSource = new DataSource({
   ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-async function deleteVendor(vendorId: number) {
+async function deleteVendor(vendorId: number, resetSequence: boolean = false) {
   console.log(`\n🔍 Iniciando eliminación del vendedor ID: ${vendorId}\n`);
+  if (resetSequence) {
+    console.log('⚠️  MODO: Reseteo de secuencia ACTIVADO\n');
+  }
+
 
   try {
     // Inicializar conexión
@@ -215,6 +228,27 @@ async function deleteVendor(vendorId: number) {
       );
       console.log(`   ✅ Vendedor eliminado\n`);
 
+      // 10. OPCIONAL: Resetear secuencia para reutilizar IDs (NO RECOMENDADO EN PRODUCCIÓN)
+      if (resetSequence) {
+        console.log('⚠️  ADVERTENCIA: Reseteando secuencia de IDs...');
+        console.log('   Esto permite reutilizar IDs eliminados.');
+        console.log('   NO se recomienda en producción por razones de integridad.\n');
+
+        // Obtener el máximo ID actual en la tabla users
+        const maxIdResult = await queryRunner.query(
+          'SELECT COALESCE(MAX(id), 0) as max_id FROM users'
+        );
+        const maxId = parseInt(maxIdResult[0].max_id);
+
+        // Resetear la secuencia al máximo ID + 1
+        await queryRunner.query(
+          `SELECT setval(pg_get_serial_sequence('users', 'id'), $1, false)`,
+          [maxId + 1]
+        );
+
+        console.log(`   ✅ Secuencia reseteada. Próximo ID será: ${maxId + 1}\n`);
+      }
+
       // Confirmar transacción
       await queryRunner.commitTransaction();
       console.log('✅ Eliminación completada exitosamente\n');
@@ -239,12 +273,17 @@ async function deleteVendor(vendorId: number) {
 }
 
 // Ejecutar script
-const vendorId = process.argv[2];
+const args = process.argv.slice(2);
+const vendorId = args.find(arg => !arg.startsWith('--'));
+const resetSequence = args.includes('--reset-sequence');
 
 if (!vendorId) {
   console.error('❌ Error: Debes proporcionar el ID del vendedor');
-  console.error('Uso: npm run script:delete-vendor <vendor-id>');
-  console.error('Ejemplo: npm run script:delete-vendor 5');
+  console.error('Uso: npm run script:delete-vendor <vendor-id> [--reset-sequence]');
+  console.error('       --reset-sequence: Resetea la secuencia de IDs para reutilizar (NO RECOMENDADO)');
+  console.error('\nEjemplos:');
+  console.error('  npm run script:delete-vendor 5');
+  console.error('  npm run script:delete-vendor 5 --reset-sequence');
   process.exit(1);
 }
 
@@ -255,7 +294,7 @@ if (isNaN(vendorIdNumber)) {
   process.exit(1);
 }
 
-deleteVendor(vendorIdNumber)
+deleteVendor(vendorIdNumber, resetSequence)
   .then(() => {
     console.log('✨ Script finalizado\n');
     process.exit(0);

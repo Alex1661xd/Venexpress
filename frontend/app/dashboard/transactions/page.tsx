@@ -342,9 +342,11 @@ export default function TransactionsPage() {
                 `Destinatario: ${selectedTransaction.beneficiaryFullName}`,
                 `Banco: ${selectedTransaction.beneficiaryBankName}`,
                 `Cuenta: ${selectedTransaction.beneficiaryAccountNumber || selectedTransaction.beneficiaryPhone || '-'}`,
-                `Monto: $${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`,
+                selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                    ? `Monto: $${parseFloat((selectedTransaction.amountUSD || 0).toString()).toFixed(2)} USD (${selectedTransaction.transactionType.toUpperCase()})`
+                    : `Monto: $${parseFloat((selectedTransaction.amountCOP || 0).toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`,
                 `Monto Bs: ${parseFloat(selectedTransaction.amountBs.toString()).toFixed(2)} Bs`,
-                `Tasa: ${selectedTransaction.saleRate != null && !isNaN(parseFloat(selectedTransaction.saleRate.toString())) ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/COP`,
+                `Tasa: ${selectedTransaction.saleRate != null && !isNaN(parseFloat(selectedTransaction.saleRate.toString())) ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2) : '-'} Bs/${selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal' ? 'USD' : 'COP'}`,
                 `Fecha: ${new Date(selectedTransaction.createdAt).toLocaleString('es-CO', {
                     year: 'numeric',
                     month: '2-digit',
@@ -814,11 +816,28 @@ export default function TransactionsPage() {
                                                 </div>
                                             </td>
                                             <td className="px-4 lg:px-6 py-4 text-gray-600 text-sm">{transaction.beneficiaryBankName}</td>
-                                            <td className="px-4 lg:px-6 py-4 text-right font-semibold text-gray-900 text-sm">
-                                                {parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                                            <td className="px-4 lg:px-6 py-4 text-right text-sm">
+                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="font-semibold text-purple-600">
+                                                            ${parseFloat((transaction.amountUSD || 0).toString()).toFixed(2)} USD
+                                                        </span>
+                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                                                            transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                            transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                            'bg-indigo-100 text-indigo-800'
+                                                        }`}>
+                                                            {transaction.transactionType.toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="font-semibold text-gray-900">
+                                                        ${parseFloat((transaction.amountCOP || 0).toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td className="px-4 lg:px-6 py-4 text-right font-semibold text-gray-900 text-sm">
-                                                {parseFloat(transaction.amountBs.toString()).toFixed(2)}
+                                            <td className="px-4 lg:px-6 py-4 text-right font-semibold text-blue-600 text-sm">
+                                                {parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs
                                             </td>
                                             <td className="px-4 lg:px-6 py-4 text-center text-gray-600 text-sm">
                                                 {transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString()))
@@ -921,8 +940,28 @@ export default function TransactionsPage() {
                                             <div className="text-xs text-gray-500 mt-1">Vendedor: {transaction.createdBy?.name || 'Sistema'}</div>
                                         </div>
                                         <div className="text-right flex-shrink-0">
-                                            <div className="text-lg font-bold text-gray-900">{parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</div>
-                                            <div className="text-sm text-gray-500">{parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs</div>
+                                            {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                <>
+                                                    <div className="text-lg font-bold text-purple-600">
+                                                        ${parseFloat((transaction.amountUSD || 0).toString()).toFixed(2)} USD
+                                                    </div>
+                                                    <span className={`inline-block text-xs px-2 py-0.5 rounded font-bold mb-1 ${
+                                                        transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                        transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                        'bg-indigo-100 text-indigo-800'
+                                                    }`}>
+                                                        {transaction.transactionType.toUpperCase()}
+                                                    </span>
+                                                    <div className="text-sm text-gray-500">{parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs</div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="text-lg font-bold text-gray-900">
+                                                        ${parseFloat((transaction.amountCOP || 0).toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP
+                                                    </div>
+                                                    <div className="text-sm text-gray-500">{parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs</div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
 
@@ -1115,10 +1154,28 @@ export default function TransactionsPage() {
 
                         {/* Amounts Section */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                                <p className="text-xs text-green-600 font-medium mb-1">Monto en COP</p>
-                                <p className="text-2xl font-bold text-green-900">
-                                    ${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                            <div className={`p-4 border rounded-xl ${
+                                selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                    ? 'bg-purple-50 border-purple-200'
+                                    : 'bg-green-50 border-green-200'
+                            }`}>
+                                <p className={`text-xs font-medium mb-1 ${
+                                    selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                        ? 'text-purple-600'
+                                        : 'text-green-600'
+                                }`}>
+                                    {selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                        ? `Monto en USD (${selectedTransaction.transactionType.toUpperCase()})`
+                                        : 'Monto en COP'}
+                                </p>
+                                <p className={`text-2xl font-bold ${
+                                    selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                        ? 'text-purple-900'
+                                        : 'text-green-900'
+                                }`}>
+                                    {selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                        ? `$${parseFloat((selectedTransaction.amountUSD || 0).toString()).toFixed(2)} USD`
+                                        : `$${parseFloat((selectedTransaction.amountCOP || 0).toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP`}
                                 </p>
                             </div>
                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
@@ -1130,13 +1187,13 @@ export default function TransactionsPage() {
                         </div>
 
                         {/* Rate Info */}
-                        <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
-                            <p className="text-xs text-purple-600 font-medium mb-1">Tasa Aplicada</p>
-                            <p className="text-xl font-bold text-purple-900">
+                        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                            <p className="text-xs text-indigo-600 font-medium mb-1">Tasa Aplicada</p>
+                            <p className="text-xl font-bold text-indigo-900">
                                 {selectedTransaction.saleRate != null && !isNaN(parseFloat(selectedTransaction.saleRate.toString()))
                                     ? parseFloat(selectedTransaction.saleRate.toString()).toFixed(2)
                                     : '-'}{' '}
-                                Bs/COP
+                                Bs/{selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal' ? 'USD' : 'COP'}
                             </p>
                         </div>
 
@@ -1403,7 +1460,11 @@ export default function TransactionsPage() {
                                 </div>
                                 <div>
                                     <p className="text-gray-500">Monto:</p>
-                                    <p className="font-medium">${parseFloat(selectedTransaction.amountCOP.toString()).toLocaleString('es-CO')}</p>
+                                    <p className="font-medium">
+                                        {selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal'
+                                            ? `$${parseFloat((selectedTransaction.amountUSD || 0).toString()).toFixed(2)} USD`
+                                            : `$${parseFloat((selectedTransaction.amountCOP || 0).toString()).toLocaleString('es-CO')} COP`}
+                                    </p>
                                 </div>
                             </div>
                         </div>

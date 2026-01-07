@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExchangeRate } from './entities/exchange-rate.entity';
 import { CreateRateDto } from './dto/create-rate.dto';
+import { RateType } from '../../common/enums/rate-type.enum';
 
 @Injectable()
 export class RatesService {
@@ -21,7 +22,7 @@ export class RatesService {
 
   async getCurrentRate(): Promise<ExchangeRate> {
     const rate = await this.ratesRepository.findOne({
-      where: {},
+      where: { rateType: RateType.ACTUAL },
       order: { createdAt: 'DESC' },
       relations: ['createdBy'],
     });
@@ -33,7 +34,28 @@ export class RatesService {
     return rate;
   }
 
-  async getHistory(limit: number = 10): Promise<ExchangeRate[]> {
+  async getCurrentRateByType(rateType: RateType): Promise<ExchangeRate | null> {
+    const rate = await this.ratesRepository.findOne({
+      where: { rateType },
+      order: { createdAt: 'DESC' },
+      relations: ['createdBy'],
+    });
+
+    return rate;
+  }
+
+  async getAllCurrentRates(): Promise<Record<RateType, ExchangeRate | null>> {
+    const rateTypes = Object.values(RateType);
+    const rates: Record<string, ExchangeRate | null> = {};
+
+    for (const rateType of rateTypes) {
+      rates[rateType] = await this.getCurrentRateByType(rateType);
+    }
+
+    return rates as Record<RateType, ExchangeRate | null>;
+  }
+
+  async getHistory(limit: number = 30): Promise<ExchangeRate[]> {
     return this.ratesRepository.find({
       take: limit,
       order: { createdAt: 'DESC' },

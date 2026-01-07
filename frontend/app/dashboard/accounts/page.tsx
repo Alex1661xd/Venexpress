@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { accountsService } from '@/services/accounts.service';
+import { transactionsService } from '@/services/transactions.service';
 import { Account, AccountSummary, AccountTransaction } from '@/types/account';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -19,7 +20,10 @@ export default function AccountsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddBalanceModalOpen, setIsAddBalanceModalOpen] = useState(false);
   const [isUpdateBalanceModalOpen, setIsUpdateBalanceModalOpen] = useState(false);
+  const [isEditCommissionModalOpen, setIsEditCommissionModalOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [selectedTransactionForCommission, setSelectedTransactionForCommission] = useState<AccountTransaction | null>(null);
+  const [editCommissionPercentage, setEditCommissionPercentage] = useState<string>('');
   const [createFormData, setCreateFormData] = useState({ name: '', initialBalance: '' });
   const [addBalanceFormData, setAddBalanceFormData] = useState({ amount: '', description: '' });
   const [updateBalanceFormData, setUpdateBalanceFormData] = useState({ balance: '' });
@@ -41,6 +45,54 @@ export default function AccountsPage() {
     }
     loadSummary();
   }, [user, authLoading, router]);
+
+  const loadTransactionCommission = async (transactionId: number) => {
+    try {
+      const transaction = await transactionsService.getTransaction(transactionId);
+      if (transaction.bankCommissionPercentage) {
+        setEditCommissionPercentage(transaction.bankCommissionPercentage.toString());
+      } else {
+        setEditCommissionPercentage('3'); // Valor por defecto
+      }
+    } catch (error) {
+      console.error('Error loading transaction commission:', error);
+      setEditCommissionPercentage('3');
+    }
+  };
+
+  const handleUpdateCommission = async () => {
+    if (!selectedTransactionForCommission || !selectedTransactionForCommission.transaction) return;
+    
+    const percentage = parseFloat(editCommissionPercentage);
+    if (isNaN(percentage) || percentage < 0 || percentage > 100) {
+      setAlertState({
+        isOpen: true,
+        message: 'Por favor ingresa un porcentaje válido (0-100)',
+        variant: 'error',
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await transactionsService.updateBankCommission(selectedTransactionForCommission.transaction!.id, percentage);
+      setAlertState({
+        isOpen: true,
+        message: 'Porcentaje de comisión bancaria actualizado exitosamente',
+        variant: 'success',
+      });
+      setIsEditCommissionModalOpen(false);
+      await loadSummary(); // Recargar para ver los cambios
+    } catch (error: any) {
+      setAlertState({
+        isOpen: true,
+        message: error.response?.data?.message || 'Error al actualizar el porcentaje de comisión',
+        variant: 'error',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const loadSummary = async () => {
     try {
@@ -67,8 +119,11 @@ export default function AccountsPage() {
       newErrors.name = 'El nombre de la cuenta es requerido';
     }
 
-    if (createFormData.initialBalance && parseFloat(createFormData.initialBalance) < 0) {
-      newErrors.initialBalance = 'El saldo inicial no puede ser negativo';
+    if (createFormData.initialBalance) {
+      const balance = parseNumberInput(createFormData.initialBalance);
+      if (balance < 0) {
+        newErrors.initialBalance = 'El saldo inicial no puede ser negativo';
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -80,7 +135,7 @@ export default function AccountsPage() {
     try {
       await accountsService.create({
         name: createFormData.name,
-        initialBalance: createFormData.initialBalance ? parseFloat(createFormData.initialBalance) : 0,
+        initialBalance: createFormData.initialBalance ? parseNumberInput(createFormData.initialBalance) : 0,
       });
       setIsCreateModalOpen(false);
       setCreateFormData({ name: '', initialBalance: '' });
@@ -104,7 +159,8 @@ export default function AccountsPage() {
 
     const newErrors: Record<string, string> = {};
 
-    if (!addBalanceFormData.amount || parseFloat(addBalanceFormData.amount) <= 0) {
+    const amount = parseNumberInput(addBalanceFormData.amount);
+    if (!addBalanceFormData.amount || amount <= 0) {
       newErrors.amount = 'El monto debe ser mayor a 0';
     }
 
@@ -116,7 +172,7 @@ export default function AccountsPage() {
     setIsSaving(true);
     try {
       await accountsService.addBalance(selectedAccount.id, {
-        amount: parseFloat(addBalanceFormData.amount),
+        amount: amount,
         description: addBalanceFormData.description || undefined,
       });
       setIsAddBalanceModalOpen(false);
@@ -145,7 +201,8 @@ export default function AccountsPage() {
 
   const openUpdateBalanceModal = (account: Account) => {
     setSelectedAccount(account);
-    setUpdateBalanceFormData({ balance: parseFloat(account.balance.toString()).toString() });
+    const balance = Math.round(parseFloat(account.balance.toString()));
+    setUpdateBalanceFormData({ balance: balance.toLocaleString('es-CO') });
     setErrors({});
     setIsUpdateBalanceModalOpen(true);
   };
@@ -156,7 +213,8 @@ export default function AccountsPage() {
 
     const newErrors: Record<string, string> = {};
 
-    if (!updateBalanceFormData.balance || parseFloat(updateBalanceFormData.balance) < 0) {
+    const balance = parseNumberInput(updateBalanceFormData.balance);
+    if (!updateBalanceFormData.balance || balance < 0) {
       newErrors.balance = 'El saldo debe ser mayor o igual a 0';
     }
 
@@ -168,7 +226,7 @@ export default function AccountsPage() {
     setIsSaving(true);
     try {
       await accountsService.updateBalance(selectedAccount.id, {
-        balance: parseFloat(updateBalanceFormData.balance),
+        balance: balance,
       });
       setIsUpdateBalanceModalOpen(false);
       setUpdateBalanceFormData({ balance: '' });
@@ -188,7 +246,21 @@ export default function AccountsPage() {
   };
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+    return Math.round(value).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  };
+
+  // Función para formatear número con punto de miles (sin decimales) para inputs
+  const formatNumberInput = (value: string): string => {
+    // Remover todo excepto números
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return '';
+    // Formatear con punto de miles
+    return parseInt(numbers, 10).toLocaleString('es-CO');
+  };
+
+  // Función para parsear número con punto de miles
+  const parseNumberInput = (value: string): number => {
+    return parseInt(value.replace(/\./g, ''), 10) || 0;
   };
 
   if (authLoading || loading) {
@@ -385,6 +457,22 @@ export default function AccountsPage() {
                       <td className="px-4 py-3 text-right font-medium text-gray-900">
                         {formatCurrency(transaction.balanceAfter)} Bs
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        {transaction.type === 'withdrawal' && transaction.transaction && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              setSelectedTransactionForCommission(transaction);
+                              await loadTransactionCommission(transaction.transaction!.id);
+                              setIsEditCommissionModalOpen(true);
+                            }}
+                            className="text-xs"
+                          >
+                            Editar %
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -439,15 +527,24 @@ export default function AccountsPage() {
             />
           </div>
           <div>
-            <Input
-              label="Saldo Inicial (Bs)"
-              type="number"
-              step="0.01"
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Saldo Inicial (Bs)
+            </label>
+            <input
+              type="text"
               value={createFormData.initialBalance}
-              onChange={(e) => setCreateFormData({ ...createFormData, initialBalance: e.target.value })}
-              error={errors.initialBalance}
-              placeholder="0.00"
+              onChange={(e) => {
+                const formatted = formatNumberInput(e.target.value);
+                setCreateFormData({ ...createFormData, initialBalance: formatted });
+              }}
+              placeholder="0"
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
+                errors.initialBalance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+              }`}
             />
+            {errors.initialBalance && (
+              <p className="text-red-600 text-xs mt-1">{errors.initialBalance}</p>
+            )}
             <p className="text-xs text-gray-500 mt-1">Opcional. Puedes agregar saldo después.</p>
           </div>
           <div className="flex justify-end gap-3 mt-6">
@@ -487,15 +584,24 @@ export default function AccountsPage() {
             </div>
           )}
           <div>
-            <Input
-              label="Monto a Agregar (Bs) *"
-              type="number"
-              step="0.01"
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Monto a Agregar (Bs) *
+            </label>
+            <input
+              type="text"
               value={addBalanceFormData.amount}
-              onChange={(e) => setAddBalanceFormData({ ...addBalanceFormData, amount: e.target.value })}
-              error={errors.amount}
-              placeholder="0.00"
+              onChange={(e) => {
+                const formatted = formatNumberInput(e.target.value);
+                setAddBalanceFormData({ ...addBalanceFormData, amount: formatted });
+              }}
+              placeholder="0"
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
+                errors.amount ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+              }`}
             />
+            {errors.amount && (
+              <p className="text-red-600 text-xs mt-1">{errors.amount}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -549,15 +655,24 @@ export default function AccountsPage() {
             </div>
           )}
           <div>
-            <Input
-              label="Nuevo Saldo Total (Bs) *"
-              type="number"
-              step="0.01"
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Nuevo Saldo Total (Bs) *
+            </label>
+            <input
+              type="text"
               value={updateBalanceFormData.balance}
-              onChange={(e) => setUpdateBalanceFormData({ ...updateBalanceFormData, balance: e.target.value })}
-              error={errors.balance}
-              placeholder="0.00"
+              onChange={(e) => {
+                const formatted = formatNumberInput(e.target.value);
+                setUpdateBalanceFormData({ ...updateBalanceFormData, balance: formatted });
+              }}
+              placeholder="0"
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
+                errors.balance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+              }`}
             />
+            {errors.balance && (
+              <p className="text-red-600 text-xs mt-1">{errors.balance}</p>
+            )}
             <p className="text-xs text-gray-500 mt-1">
               Se registrará automáticamente la diferencia como depósito o retiro.
             </p>
@@ -578,6 +693,94 @@ export default function AccountsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Edit Commission Modal */}
+      <Modal
+        isOpen={isEditCommissionModalOpen}
+        onClose={() => {
+          setIsEditCommissionModalOpen(false);
+          setSelectedTransactionForCommission(null);
+          setEditCommissionPercentage('');
+        }}
+        title="Editar Porcentaje de Comisión Bancaria"
+        size="md"
+      >
+        {selectedTransactionForCommission && selectedTransactionForCommission.transaction && (
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+              <p className="text-sm font-medium text-blue-900 mb-2">Información de la Transacción</p>
+              <div className="space-y-1 text-sm">
+                <p className="text-gray-700">
+                  <span className="font-semibold">Transacción #:</span> {selectedTransactionForCommission.transaction.id}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">Total retirado:</span> {formatCurrency(selectedTransactionForCommission.amount)} Bs
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">Cuenta:</span> {selectedTransactionForCommission.account.name}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Porcentaje de Comisión Bancaria (%)
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                max="100"
+                value={editCommissionPercentage}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0 && parseFloat(value) <= 100)) {
+                    setEditCommissionPercentage(value);
+                  }
+                }}
+                placeholder="3.00"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Ingresa el porcentaje de comisión bancaria (ej: 3.00 para 3%)
+              </p>
+            </div>
+
+            {editCommissionPercentage && !isNaN(parseFloat(editCommissionPercentage)) && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                <p className="text-xs text-amber-700 mb-2 font-medium">Resumen del ajuste:</p>
+                <div className="space-y-1 text-sm">
+                  <p className="text-xs text-amber-700">
+                    ⚠️ Al cambiar el porcentaje, el saldo de la cuenta se ajustará automáticamente según la diferencia.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsEditCommissionModalOpen(false);
+                  setSelectedTransactionForCommission(null);
+                  setEditCommissionPercentage('');
+                }}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUpdateCommission}
+                isLoading={isSaving}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Guardar Cambios
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Alert */}

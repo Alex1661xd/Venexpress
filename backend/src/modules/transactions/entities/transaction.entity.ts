@@ -14,6 +14,7 @@ import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { TransactionHistory } from './transaction-history.entity';
 import { TransactionStatus } from '../../../common/enums/transaction-status.enum';
 import { VendorPaymentMethod } from '../../../common/enums/vendor-payment-method.enum';
+import { TransactionType } from '../../../common/enums/transaction-type.enum';
 
 @Entity('transactions')
 export class Transaction {
@@ -57,8 +58,19 @@ export class Transaction {
   @Column({ nullable: true, default: false })
   beneficiaryIsPagoMovil: boolean;
 
-  @Column('decimal', { precision: 12, scale: 2 })
-  amountCOP: number;
+  @Column({
+    type: 'enum',
+    enum: TransactionType,
+    default: TransactionType.NORMAL,
+    name: 'transaction_type',
+  })
+  transactionType: TransactionType; // Tipo de transacción (normal, paypal, zelle, dolares)
+
+  @Column('decimal', { precision: 12, scale: 2, nullable: true })
+  amountCOP: number; // Nullable para transacciones en USD
+
+  @Column('decimal', { precision: 12, scale: 2, nullable: true, name: 'amount_usd' })
+  amountUSD: number; // Monto en dólares (para PayPal, Zelle, Dólares)
 
   @Column('decimal', { precision: 12, scale: 4 })
   amountBs: number;
@@ -154,5 +166,15 @@ export class Transaction {
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'transaction_commission' })
   transactionCommission: number; // Comisión específica de esta transacción (2%, 4%, 5%, etc.)
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'bank_commission_percentage' })
+  bankCommissionPercentage: number; // Porcentaje de comisión bancaria cobrada al completar la transferencia (ej: 3%)
+
+  @Index()
+  @Column({ type: 'boolean', default: false, name: 'is_paid_to_venezuela' })
+  isPaidToVenezuela: boolean; // Indica si la deuda de esta transacción ya fue pagada a Admin Venezuela
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'paid_to_venezuela_at' })
+  paidToVenezuelaAt: Date; // Fecha en que se marcó como pagada a Venezuela
 }
 

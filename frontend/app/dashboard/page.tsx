@@ -11,7 +11,7 @@ import ExchangeCalculator from '@/components/ExchangeCalculator';
 import EarningsPasswordModal from '@/components/EarningsPasswordModal';
 import { ratesService } from '@/services/rates.service';
 import { transactionsService } from '@/services/transactions.service';
-import { ExchangeRate } from '@/types/rate';
+import { ExchangeRate, RateType } from '@/types/rate';
 import { Transaction } from '@/types/transaction';
 import { getLocalDateString } from '@/utils/date';
 
@@ -20,6 +20,13 @@ export default function DashboardPage() {
     const { user, loading } = useAuth();
     const earningsPassword = useEarningsPassword();
     const [currentRate, setCurrentRate] = useState<ExchangeRate | null>(null);
+    const [allRates, setAllRates] = useState<Record<RateType, ExchangeRate | null>>({
+        [RateType.ACTUAL]: null,
+        [RateType.PAYPAL]: null,
+        [RateType.ZELLE]: null,
+        [RateType.DOLARES]: null,
+        [RateType.BANCO_CENTRAL]: null,
+    });
     const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
     const [stats, setStats] = useState({ total: 0, pendientes: 0, rechazadas: 0, completadas: 0 });
     const [todayEarnings, setTodayEarnings] = useState<number | null>(null);
@@ -38,23 +45,27 @@ export default function DashboardPage() {
         }
     }, [user]);
 
-    // Actualizar solo la tasa cada minuto
+    // Actualizar todas las tasas cada minuto
     useEffect(() => {
         if (user) {
-            const loadCurrentRate = async () => {
+            const loadRates = async () => {
                 try {
                     const rate = await ratesService.getCurrentRate();
                     setCurrentRate(rate);
+                    
+                    // Cargar todas las tasas para la calculadora (disponible para todos los usuarios)
+                    const allRatesData = await ratesService.getAllCurrentRates();
+                    setAllRates(allRatesData);
                 } catch (error) {
-                    console.error('Error loading current rate:', error);
+                    console.error('Error loading rates:', error);
                 }
             };
 
             // Cargar inmediatamente
-            loadCurrentRate();
+            loadRates();
 
             // Actualizar cada minuto
-            const rateIntervalId = setInterval(loadCurrentRate, 60_000);
+            const rateIntervalId = setInterval(loadRates, 60_000);
 
             return () => clearInterval(rateIntervalId);
         }
@@ -64,6 +75,10 @@ export default function DashboardPage() {
         try {
             const rate = await ratesService.getCurrentRate();
             setCurrentRate(rate);
+            
+            // Cargar todas las tasas para la calculadora (disponible para todos los usuarios)
+            const allRatesData = await ratesService.getAllCurrentRates();
+            setAllRates(allRatesData);
 
             if (user?.role === 'admin_venezuela') {
                 // Para admin_venezuela, cargar giros pendientes y ganancias de hoy
@@ -101,7 +116,11 @@ export default function DashboardPage() {
                 const transactions = await transactionsService.getTransactions(100, 0, today, today);
 
                 // Calcular ganancias de hoy con comisión dinámica (usando transactionCommission)
-                const completedToday = transactions.filter(t => t.status === 'completado');
+                // SOLO transacciones normales (excluir PayPal, Zelle, Dólares)
+                const completedToday = transactions.filter(t => 
+                    t.status === 'completado' && 
+                    (!t.transactionType || t.transactionType === 'normal')
+                );
                 const todayEarningsCalc = completedToday.reduce((sum, t) => {
                     const copValue = parseFloat(t.amountCOP?.toString() || '0');
                     // Usar la comisión específica de la transacción, fallback al commission del usuario
@@ -482,12 +501,34 @@ export default function DashboardPage() {
                                         </div>
                                         <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
                                             <div className="text-left sm:text-right">
-                                                <p className="font-bold text-gray-900 text-sm sm:text-base">
-                                                    ${parseFloat(transaction.amountCOP.toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                                                </p>
-                                                <p className="text-xs sm:text-sm text-gray-500">
-                                                    {parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs
-                                                </p>
+                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                    <>
+                                                        <p className="font-bold text-purple-600 text-sm sm:text-base">
+                                                            ${parseFloat((transaction.amountUSD || 0).toString()).toFixed(2)} USD
+                                                        </p>
+                                                        <div className="flex items-center gap-1 justify-start sm:justify-end mt-0.5">
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                                                                transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                                transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                                'bg-indigo-100 text-indigo-800'
+                                                            }`}>
+                                                                {transaction.transactionType.toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                                                            {parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs
+                                                        </p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="font-bold text-gray-900 text-sm sm:text-base">
+                                                            ${parseFloat((transaction.amountCOP || 0).toString()).toLocaleString('es-CO', { maximumFractionDigits: 0 })} COP
+                                                        </p>
+                                                        <p className="text-xs sm:text-sm text-gray-500">
+                                                            {parseFloat(transaction.amountBs.toString()).toFixed(2)} Bs
+                                                        </p>
+                                                    </>
+                                                )}
                                             </div>
                                             <div className="flex-shrink-0">
                                                 <Badge status={transaction.status} />
@@ -537,15 +578,18 @@ export default function DashboardPage() {
             )}
 
             {/* Exchange Calculator Modal */}
-            {
-                currentRate && (
-                    <ExchangeCalculator
-                        rate={parseFloat(currentRate.saleRate.toString())}
-                        isOpen={showCalculator}
-                        onClose={() => setShowCalculator(false)}
-                    />
-                )
-            }
+            {currentRate && (
+                <ExchangeCalculator
+                    rates={{
+                        actual: allRates[RateType.ACTUAL],
+                        banco_central: allRates[RateType.BANCO_CENTRAL],
+                        paypal: allRates[RateType.PAYPAL],
+                        zelle: allRates[RateType.ZELLE],
+                    }}
+                    isOpen={showCalculator}
+                    onClose={() => setShowCalculator(false)}
+                />
+            )}
         </div >
     );
 }

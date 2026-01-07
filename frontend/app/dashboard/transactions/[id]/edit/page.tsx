@@ -43,6 +43,7 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
 
     const [formData, setFormData] = useState({
         amountCOP: '',
+        amountUSD: '',
         amountBs: '',
         beneficiaryId: '',
         notes: '',
@@ -102,7 +103,8 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
             setBeneficiaries(beneficiariesData);
 
             setFormData({
-                amountCOP: new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(transactionData.amountCOP),
+                amountCOP: transactionData.amountCOP ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(transactionData.amountCOP) : '',
+                amountUSD: transactionData.amountUSD ? transactionData.amountUSD.toString() : '',
                 amountBs: transactionData.amountBs.toString(),
                 beneficiaryId: transactionData.beneficiary?.id?.toString() || '',
                 notes: transactionData.notes || '',
@@ -175,31 +177,69 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
             return;
         }
 
-        if (name === 'amountCOP') {
-            const rawValue = value.replace(/\./g, '');
+        const transactionType = transaction.transactionType || 'normal';
+        const isNormalType = transactionType === 'normal';
 
-            if (rawValue === '' || /^\d+$/.test(rawValue)) {
-                if (rawValue === '') {
-                    setFormData(prev => ({ ...prev, amountCOP: '', amountBs: '' }));
-                    return;
+        if (isNormalType) {
+            // Transacción normal: COP ↔ Bs
+            if (name === 'amountCOP') {
+                const rawValue = value.replace(/\./g, '');
+
+                if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                    if (rawValue === '') {
+                        setFormData(prev => ({ ...prev, amountCOP: '', amountBs: '' }));
+                        return;
+                    }
+
+                    const cop = parseFloat(rawValue);
+                    const bs = cop / rate;
+                    setFormData(prev => ({
+                        ...prev,
+                        amountCOP: formatCOP(cop),
+                        amountBs: bs.toFixed(2)
+                    }));
                 }
-
-                const cop = parseFloat(rawValue);
-                const bs = cop / rate;
+            } else if (name === 'amountBs') {
+                const bs = parseFloat(value) || 0;
+                const cop = bs * rate;
                 setFormData(prev => ({
                     ...prev,
-                    amountCOP: formatCOP(cop),
-                    amountBs: bs.toFixed(2)
+                    amountBs: value,
+                    amountCOP: formatCOP(cop)
                 }));
             }
         } else {
-            const bs = parseFloat(value) || 0;
-            const cop = bs * rate;
-            setFormData(prev => ({
-                ...prev,
-                amountBs: value,
-                amountCOP: formatCOP(cop)
-            }));
+            // Transacciones USD (PayPal, Zelle, Dólares): USD ↔ Bs
+            if (name === 'amountUSD') {
+                const cleanValue = value.replace(/[^\d.]/g, '');
+                const parts = cleanValue.split('.');
+                if (parts.length > 2) return;
+
+                if (cleanValue === '') {
+                    setFormData(prev => ({ ...prev, amountUSD: '', amountBs: '' }));
+                    return;
+                }
+
+                const usd = parseFloat(cleanValue);
+                if (!isNaN(usd)) {
+                    // USD × tasa = Bs
+                    const bs = Math.round(usd * rate);
+                    setFormData(prev => ({
+                        ...prev,
+                        amountUSD: cleanValue,
+                        amountBs: bs.toString()
+                    }));
+                }
+            } else if (name === 'amountBs') {
+                const bs = parseFloat(value) || 0;
+                // Bs ÷ tasa = USD
+                const usd = (bs / rate).toFixed(2);
+                setFormData(prev => ({
+                    ...prev,
+                    amountBs: value,
+                    amountUSD: usd
+                }));
+            }
         }
     };
 
@@ -233,11 +273,18 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                                 clientColombiaId: beneficiaryData.clientColombiaId,
                             }
                         );
-                        await transactionsService.updateTransaction(parseInt(id), {
-                            amountCOP: parseFloat(formData.amountCOP.replace(/\./g, '')),
+                        const updateData: any = {
                             beneficiaryId: parseInt(formData.beneficiaryId),
                             notes: formData.notes,
-                        });
+                        };
+                        
+                        if (transaction?.transactionType && transaction.transactionType !== 'normal') {
+                            updateData.amountUSD = parseFloat(formData.amountUSD);
+                        } else {
+                            updateData.amountCOP = parseFloat(formData.amountCOP.replace(/\./g, ''));
+                        }
+                        
+                        await transactionsService.updateTransaction(parseInt(id), updateData);
                         setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
                         router.push('/dashboard/transactions');
                     }
@@ -246,11 +293,18 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                 return;
             }
 
-            await transactionsService.updateTransaction(parseInt(id), {
-                amountCOP: parseFloat(formData.amountCOP.replace(/\./g, '')),
+            const updateData: any = {
                 beneficiaryId: parseInt(formData.beneficiaryId),
                 notes: formData.notes,
-            });
+            };
+            
+            if (transaction?.transactionType && transaction.transactionType !== 'normal') {
+                updateData.amountUSD = parseFloat(formData.amountUSD);
+            } else {
+                updateData.amountCOP = parseFloat(formData.amountCOP.replace(/\./g, ''));
+            }
+            
+            await transactionsService.updateTransaction(parseInt(id), updateData);
 
             router.push('/dashboard/transactions');
         } catch (error: any) {
@@ -357,15 +411,39 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                         </div>
                     )}
 
+                    {/* Tipo de transacción */}
+                    {transaction.transactionType && transaction.transactionType !== 'normal' && (
+                        <div className={`p-3 rounded-lg border-2 ${
+                            transaction.transactionType === 'dolares' ? 'bg-green-50 border-green-300' :
+                            transaction.transactionType === 'paypal' ? 'bg-purple-50 border-purple-300' :
+                            'bg-indigo-50 border-indigo-300'
+                        }`}>
+                            <p className="text-sm font-semibold">
+                                Tipo de transacción: <span className="uppercase">{transaction.transactionType}</span>
+                            </p>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Input
-                            label="Monto en Pesos (COP)"
-                            name="amountCOP"
-                            type="text"
-                            value={formData.amountCOP}
-                            onChange={handleAmountChange}
-                            required
-                        />
+                        {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                            <Input
+                                label="Monto en Dólares (USD)"
+                                name="amountUSD"
+                                type="text"
+                                value={formData.amountUSD}
+                                onChange={handleAmountChange}
+                                required
+                            />
+                        ) : (
+                            <Input
+                                label="Monto en Pesos (COP)"
+                                name="amountCOP"
+                                type="text"
+                                value={formData.amountCOP}
+                                onChange={handleAmountChange}
+                                required
+                            />
+                        )}
                         <Input
                             label="Monto en Bolívares (Bs)"
                             name="amountBs"
@@ -376,15 +454,27 @@ export default function EditTransactionPage({ params }: { params: Promise<{ id: 
                         />
                     </div>
 
-                    <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
-                        <p className="text-sm text-green-800">
+                    <div className={`p-4 rounded-lg border-2 ${
+                        transaction.transactionType && transaction.transactionType !== 'normal'
+                            ? 'bg-purple-50 border-purple-200'
+                            : 'bg-green-50 border-green-200'
+                    }`}>
+                        <p className={`text-sm ${
+                            transaction.transactionType && transaction.transactionType !== 'normal'
+                                ? 'text-purple-800'
+                                : 'text-green-800'
+                        }`}>
                             Tasa de cambio original: <span className="font-bold">
                                 {Number(transaction.saleRate || transaction.rateUsed || 0) > 0
                                     ? Number(transaction.saleRate || transaction.rateUsed).toFixed(4)
-                                    : '-'} Bs/COP
+                                    : '-'} Bs/{transaction.transactionType && transaction.transactionType !== 'normal' ? 'USD' : 'COP'}
                             </span>
                         </p>
-                        <p className="text-xs text-green-600 mt-1">
+                        <p className={`text-xs mt-1 ${
+                            transaction.transactionType && transaction.transactionType !== 'normal'
+                                ? 'text-purple-600'
+                                : 'text-green-600'
+                        }`}>
                             Esta es la tasa que se usó al crear la transacción
                         </p>
                     </div>

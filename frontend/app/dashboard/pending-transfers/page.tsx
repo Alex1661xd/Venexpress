@@ -39,6 +39,7 @@ export default function PendingTransfersPage() {
     const [completeVoucherPreview, setCompleteVoucherPreview] = useState<string>('');
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+    const [bankCommissionPercentage, setBankCommissionPercentage] = useState<string>('3');
 
     // Reject modal states
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -119,6 +120,8 @@ export default function PendingTransfersPage() {
         setCompleteVoucher(null);
         setCompleteVoucherPreview('');
         setSelectedAccountId(null);
+        // Si la transacción ya tiene un porcentaje de comisión guardado, usarlo, sino usar 3% por defecto
+        setBankCommissionPercentage(transaction.bankCommissionPercentage ? transaction.bankCommissionPercentage.toString() : '3');
         setIsCompleteModalOpen(true);
     };
 
@@ -163,10 +166,14 @@ export default function PendingTransfersPage() {
 
             const accountBalance = parseFloat(selectedAccount.balance.toString());
             const transactionAmount = parseFloat(selectedTransaction.amountBs.toString());
-            if (accountBalance < transactionAmount) {
+            const commissionPercentage = parseFloat(bankCommissionPercentage) || 0;
+            const commissionAmount = (transactionAmount * commissionPercentage) / 100;
+            const totalToWithdraw = transactionAmount + commissionAmount;
+            
+            if (accountBalance < totalToWithdraw) {
                 setAlertState({
                     isOpen: true,
-                    message: `Saldo insuficiente en ${selectedAccount.name}. Disponible: ${accountBalance.toFixed(2)} Bs, Requerido: ${transactionAmount} Bs`,
+                    message: `Saldo insuficiente en ${selectedAccount.name}. Disponible: ${accountBalance.toFixed(2)} Bs, Requerido: ${totalToWithdraw.toFixed(2)} Bs (${transactionAmount.toFixed(2)} Bs giro + ${commissionAmount.toFixed(2)} Bs comisión)`,
                     variant: 'error'
                 });
                 return;
@@ -178,7 +185,8 @@ export default function PendingTransfersPage() {
             await transactionsService.completeTransfer(
                 selectedTransaction.id, 
                 completeVoucher || undefined,
-                selectedAccountId || undefined
+                selectedAccountId || undefined,
+                bankCommissionPercentage ? parseFloat(bankCommissionPercentage) : undefined
             );
             setIsCompleteModalOpen(false);
             setAlertState({
@@ -298,9 +306,12 @@ export default function PendingTransfersPage() {
         }
     };
 
-    const formatCurrency = (amount: number, currency: 'COP' | 'Bs') => {
+    const formatCurrency = (amount: number, currency: 'COP' | 'Bs' | 'USD') => {
         if (currency === 'COP') {
             return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+        }
+        if (currency === 'USD') {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
         }
         return `${amount.toFixed(2)} Bs`;
     };
@@ -318,7 +329,9 @@ export default function PendingTransfersPage() {
         if (!tx) return;
 
         const isPagoMovil = tx.beneficiaryIsPagoMovil;
-        const amountCOP = formatCurrency(Number(tx.amountCOP), 'COP');
+        const isUSDTransaction = tx.transactionType && tx.transactionType !== 'normal';
+        const amountCOP = formatCurrency(Number(tx.amountCOP || 0), 'COP');
+        const amountUSD = formatCurrency(Number(tx.amountUSD || 0), 'USD');
         const amountBs = formatCurrency(Number(tx.amountBs), 'Bs');
         const rate = tx.saleRate != null && !isNaN(Number(tx.saleRate))
             ? Number(tx.saleRate).toFixed(2)
@@ -344,8 +357,13 @@ export default function PendingTransfersPage() {
             }
         }
 
-        text += `\nTasa: ${rate}\n`;
-        text += `Monto COP: ${amountCOP}\n`;
+        text += `\nTasa: ${rate} Bs/${isUSDTransaction ? 'USD' : 'COP'}\n`;
+        if (isUSDTransaction) {
+            text += `Tipo: ${tx.transactionType.toUpperCase()}\n`;
+            text += `Monto USD: ${amountUSD}\n`;
+        } else {
+            text += `Monto COP: ${amountCOP}\n`;
+        }
         text += `Monto Bs: ${amountBs}\n`;
         text += `Vendedor: ${tx.createdBy?.name || 'N/A'}`;
         navigator.clipboard.writeText(text).then(() => {
@@ -534,8 +552,26 @@ export default function PendingTransfersPage() {
 
                                             <div>
                                                 <p className="text-xs text-gray-500 mb-1">Montos</p>
-                                                <p className="font-bold text-green-600">{formatCurrency(Number(transaction.amountCOP), 'COP')}</p>
-                                                <p className="text-sm font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</p>
+                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                    <>
+                                                        <p className="font-bold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')} USD</p>
+                                                        <p className="text-sm font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</p>
+                                                        <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded ${
+                                                            transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                            transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                            'bg-indigo-100 text-indigo-800'
+                                                        }`}>
+                                                            {transaction.transactionType === 'dolares' ? '💵 DÓLARES' :
+                                                             transaction.transactionType === 'paypal' ? '💳 PAYPAL' :
+                                                             '💰 ZELLE'}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="font-bold text-green-600">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</p>
+                                                        <p className="text-sm font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</p>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
 
@@ -705,12 +741,37 @@ export default function PendingTransfersPage() {
 
                         {/* Amounts */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                                <p className="text-xs text-green-600 font-medium mb-1">Monto COP</p>
-                                <p className="text-2xl font-bold text-green-900">
-                                    {formatCurrency(Number(selectedTransaction.amountCOP), 'COP')}
-                                </p>
-                            </div>
+                            {selectedTransaction.transactionType && selectedTransaction.transactionType !== 'normal' ? (
+                                <div className={`p-4 border rounded-xl ${
+                                    selectedTransaction.transactionType === 'dolares' ? 'bg-green-50 border-green-200' :
+                                    selectedTransaction.transactionType === 'paypal' ? 'bg-purple-50 border-purple-200' :
+                                    'bg-indigo-50 border-indigo-200'
+                                }`}>
+                                    <p className={`text-xs font-medium mb-1 ${
+                                        selectedTransaction.transactionType === 'dolares' ? 'text-green-600' :
+                                        selectedTransaction.transactionType === 'paypal' ? 'text-purple-600' :
+                                        'text-indigo-600'
+                                    }`}>
+                                        {selectedTransaction.transactionType === 'dolares' ? 'Monto en Dólares' :
+                                         selectedTransaction.transactionType === 'paypal' ? 'Monto PayPal (USD)' :
+                                         'Monto Zelle (USD)'}
+                                    </p>
+                                    <p className={`text-2xl font-bold ${
+                                        selectedTransaction.transactionType === 'dolares' ? 'text-green-900' :
+                                        selectedTransaction.transactionType === 'paypal' ? 'text-purple-900' :
+                                        'text-indigo-900'
+                                    }`}>
+                                        {formatCurrency(Number(selectedTransaction.amountUSD || 0), 'USD')}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                                    <p className="text-xs text-green-600 font-medium mb-1">Monto COP</p>
+                                    <p className="text-2xl font-bold text-green-900">
+                                        {formatCurrency(Number(selectedTransaction.amountCOP || 0), 'COP')}
+                                    </p>
+                                </div>
+                            )}
                             <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
                                 <p className="text-xs text-blue-600 font-medium mb-1">Monto a Pagar (Bs)</p>
                                 <p className="text-2xl font-bold text-blue-900">
@@ -890,6 +951,65 @@ export default function PendingTransfersPage() {
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Bank Commission Percentage (Admin Venezuela only, after account selection) */}
+                        {isAdminVenezuela && selectedAccountId && (
+                            <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                                <label className="block text-sm font-bold text-amber-900 mb-2">
+                                    💳 Porcentaje de Comisión Bancaria (%)
+                                </label>
+                                <p className="text-xs text-amber-700 mb-3">
+                                    Ingresa el porcentaje de comisión que cobra el banco por esta transferencia (ej: 3%).
+                                    Se restará del saldo de la cuenta seleccionada además del monto del giro.
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        value={bankCommissionPercentage}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '' || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0 && parseFloat(value) <= 100)) {
+                                                setBankCommissionPercentage(value);
+                                            }
+                                        }}
+                                        placeholder="3.00"
+                                        className="flex-1 px-4 py-2 border-2 border-amber-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none text-lg font-semibold"
+                                    />
+                                    <span className="text-amber-700 font-bold">%</span>
+                                </div>
+                                {bankCommissionPercentage && !isNaN(parseFloat(bankCommissionPercentage)) && selectedTransaction && (
+                                    <div className="mt-3 p-3 bg-white rounded-lg border border-amber-200">
+                                        <p className="text-xs text-amber-600 mb-1">Resumen de retiro:</p>
+                                        <div className="space-y-1 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Monto del giro:</span>
+                                                <span className="font-semibold text-gray-900">{formatCurrency(Number(selectedTransaction.amountBs), 'Bs')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Comisión bancaria ({bankCommissionPercentage}%):</span>
+                                                <span className="font-semibold text-amber-700">
+                                                    {formatCurrency((Number(selectedTransaction.amountBs) * parseFloat(bankCommissionPercentage)) / 100, 'Bs')}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between pt-1 border-t border-amber-200">
+                                                <span className="font-bold text-amber-900">Total a retirar:</span>
+                                                <span className="font-bold text-amber-900">
+                                                    {formatCurrency(
+                                                        Number(selectedTransaction.amountBs) + 
+                                                        (Number(selectedTransaction.amountBs) * parseFloat(bankCommissionPercentage)) / 100,
+                                                        'Bs'
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

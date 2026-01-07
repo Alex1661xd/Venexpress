@@ -24,6 +24,8 @@ export default function NewTransactionPage() {
     const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
     const [filteredBeneficiaries, setFilteredBeneficiaries] = useState<Beneficiary[]>([]);
     const [currentRate, setCurrentRate] = useState<ExchangeRate | null>(null);
+    const [allRates, setAllRates] = useState<Record<string, ExchangeRate | null>>({});
+    const [transactionType, setTransactionType] = useState<'normal' | 'paypal' | 'zelle' | 'dolares'>('normal');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -42,6 +44,7 @@ export default function NewTransactionPage() {
         clientPresencialId: '',
         beneficiaryId: '',
         amountCOP: '',
+        amountUSD: '',
         amountBs: '',
         notes: '',
         confirmedReceipt: false,
@@ -65,16 +68,24 @@ export default function NewTransactionPage() {
 
     const loadData = async () => {
         try {
-            const [clientsData, beneficiariesData, rate] = await Promise.all([
+            const [clientsData, beneficiariesData, rate, rates] = await Promise.all([
                 clientsService.getClients(),
                 beneficiariesService.getBeneficiaries(),
                 ratesService.getCurrentRate(),
+                ratesService.getAllCurrentRates(),
             ]);
             setClients(clientsData);
             setBeneficiaries(beneficiariesData);
             setFilteredBeneficiaries(beneficiariesData);
             setCurrentRate(rate);
-            console.log('Current rate loaded:', rate); // Debug log
+            
+            // rates ya viene como un objeto Record<RateType, ExchangeRate | null>
+            const ratesMap: Record<string, ExchangeRate | null> = {
+                actual: rate,
+                ...rates,
+            };
+            setAllRates(ratesMap);
+            console.log('Rates loaded:', ratesMap); // Debug log
         } catch (error) {
             console.error('Error loading data:', error);
             setAlertState({
@@ -153,14 +164,66 @@ export default function NewTransactionPage() {
         }
     };
 
+    const handleAmountUSDChange = (value: string) => {
+        // Limpiar el valor
+        const cleanValue = value.replace(/[^\d.]/g, '');
+        
+        // Validar que solo tenga un punto decimal
+        const parts = cleanValue.split('.');
+        if (parts.length > 2) return;
+        
+        setFormData({ ...formData, amountUSD: cleanValue, amountBs: '' });
+        
+        if (cleanValue && !isNaN(parseFloat(cleanValue))) {
+            const usd = parseFloat(cleanValue);
+            
+            // Usar tasa personalizada si está activa, sino usar la tasa del tipo de transacción
+            let rate = 0;
+            if (useCustomRate && customRate) {
+                rate = parseFloat(customRate);
+            } else {
+                // Obtener la tasa correspondiente según el tipo
+                if (transactionType === 'dolares') {
+                    rate = allRates.dolares?.saleRate || 0;
+                } else if (transactionType === 'paypal') {
+                    rate = allRates.paypal?.saleRate || 0;
+                } else if (transactionType === 'zelle') {
+                    rate = allRates.zelle?.saleRate || 0;
+                }
+            }
+            
+            if (rate > 0) {
+                // USD × tasa_respectiva = Bs
+                const bs = Math.round(usd * rate);
+                setFormData(prev => ({ ...prev, amountUSD: cleanValue, amountBs: bs.toString() }));
+            }
+        }
+    };
+
     const handleOpenCustomRateModal = () => {
-        if (currentRate) {
-            const rateValue = typeof currentRate.saleRate === 'number'
-                ? currentRate.saleRate
-                : parseFloat(String(currentRate.saleRate));
-            setCustomRate(rateValue.toFixed(2));
+        // Para transacciones normales, usar currentRate
+        // Para transacciones USD, usar la tasa del tipo correspondiente
+        if (transactionType === 'normal') {
+            if (currentRate) {
+                const rateValue = typeof currentRate.saleRate === 'number'
+                    ? currentRate.saleRate
+                    : parseFloat(String(currentRate.saleRate));
+                setCustomRate(rateValue.toFixed(2));
+            } else {
+                setCustomRate('');
+            }
         } else {
-            setCustomRate('');
+            // Para USD, usar la tasa del tipo de transacción
+            const rateKey = transactionType;
+            const typeRate = allRates[rateKey];
+            if (typeRate) {
+                const rateValue = typeof typeRate.saleRate === 'number'
+                    ? typeRate.saleRate
+                    : parseFloat(String(typeRate.saleRate));
+                setCustomRate(rateValue.toFixed(2));
+            } else {
+                setCustomRate('');
+            }
         }
         setCustomRateConfirmed(false);
         setIsCustomRateModalOpen(true);
@@ -176,7 +239,9 @@ export default function NewTransactionPage() {
             return;
         }
 
-        if (!customRateConfirmed) {
+        // Para transacciones normales, requerir confirmación
+        // Para transacciones USD, no es necesario (no afecta comisiones)
+        if (transactionType === 'normal' && !customRateConfirmed) {
             setAlertState({
                 isOpen: true,
                 message: 'Debes confirmar que consultaste esta tasa con el administrador',
@@ -188,15 +253,28 @@ export default function NewTransactionPage() {
         setUseCustomRate(true);
         setIsCustomRateModalOpen(false);
 
-        // Recalcular montos con la nueva tasa
-        if (formData.amountCOP) {
-            const cop = parseFloat(formData.amountCOP.replace(/\./g, ''));
-            const bs = cop / parseFloat(customRate);
-            setFormData(prev => ({ ...prev, amountBs: Math.round(bs).toString() }));
-        } else if (formData.amountBs) {
-            const bs = parseFloat(formData.amountBs);
-            const cop = bs * parseFloat(customRate);
-            setFormData(prev => ({ ...prev, amountCOP: formatCOP(cop) }));
+        // Recalcular montos con la nueva tasa según el tipo de transacción
+        if (transactionType === 'normal') {
+            if (formData.amountCOP) {
+                const cop = parseFloat(formData.amountCOP.replace(/\./g, ''));
+                const bs = cop / parseFloat(customRate);
+                setFormData(prev => ({ ...prev, amountBs: Math.round(bs).toString() }));
+            } else if (formData.amountBs) {
+                const bs = parseFloat(formData.amountBs);
+                const cop = bs * parseFloat(customRate);
+                setFormData(prev => ({ ...prev, amountCOP: formatCOP(cop) }));
+            }
+        } else {
+            // Para transacciones USD
+            if (formData.amountUSD) {
+                const usd = parseFloat(formData.amountUSD);
+                const bs = Math.round(usd * parseFloat(customRate));
+                setFormData(prev => ({ ...prev, amountBs: bs.toString() }));
+            } else if (formData.amountBs) {
+                const bs = parseFloat(formData.amountBs);
+                const usd = (bs / parseFloat(customRate)).toFixed(2);
+                setFormData(prev => ({ ...prev, amountUSD: usd }));
+            }
         }
     };
 
@@ -205,15 +283,36 @@ export default function NewTransactionPage() {
         setCustomRate('');
         setCustomRateConfirmed(false);
 
-        // Recalcular montos con la tasa oficial
-        if (formData.amountCOP && currentRate) {
-            const cop = parseFloat(formData.amountCOP.replace(/\./g, ''));
-            const bs = cop / Number(currentRate.saleRate);
-            setFormData(prev => ({ ...prev, amountBs: Math.round(bs).toString() }));
-        } else if (formData.amountBs && currentRate) {
-            const bs = parseFloat(formData.amountBs);
-            const cop = bs * Number(currentRate.saleRate);
-            setFormData(prev => ({ ...prev, amountCOP: formatCOP(cop) }));
+        // Recalcular montos con la tasa oficial según el tipo de transacción
+        if (transactionType === 'normal') {
+            if (formData.amountCOP && currentRate) {
+                const cop = parseFloat(formData.amountCOP.replace(/\./g, ''));
+                const bs = cop / Number(currentRate.saleRate);
+                setFormData(prev => ({ ...prev, amountBs: Math.round(bs).toString() }));
+            } else if (formData.amountBs && currentRate) {
+                const bs = parseFloat(formData.amountBs);
+                const cop = bs * Number(currentRate.saleRate);
+                setFormData(prev => ({ ...prev, amountCOP: formatCOP(cop) }));
+            }
+        } else {
+            // Para transacciones USD, recalcular con la tasa oficial del tipo
+            if (formData.amountUSD) {
+                const usd = parseFloat(formData.amountUSD);
+                const rateKey = transactionType;
+                const rate = allRates[rateKey]?.saleRate || 0;
+                if (rate > 0) {
+                    const bs = Math.round(usd * rate);
+                    setFormData(prev => ({ ...prev, amountBs: bs.toString() }));
+                }
+            } else if (formData.amountBs) {
+                const bs = parseFloat(formData.amountBs);
+                const rateKey = transactionType;
+                const rate = allRates[rateKey]?.saleRate || 0;
+                if (rate > 0) {
+                    const usd = (bs / rate).toFixed(2);
+                    setFormData(prev => ({ ...prev, amountUSD: usd }));
+                }
+            }
         }
     };
 
@@ -293,8 +392,12 @@ export default function NewTransactionPage() {
                 const formDataToSend = new FormData();
                 formDataToSend.append('beneficiaryId', formData.beneficiaryId);
                 formDataToSend.append('clientPresencialId', formData.clientPresencialId);
+                formDataToSend.append('transactionType', transactionType);
                 if (formData.amountCOP) {
                     formDataToSend.append('amountCOP', parseFloat(formData.amountCOP.replace(/\./g, '')).toString());
+                }
+                if (formData.amountUSD) {
+                    formDataToSend.append('amountUSD', parseFloat(formData.amountUSD).toString());
                 }
                 if (formData.amountBs) {
                     formDataToSend.append('amountBs', formData.amountBs);
@@ -316,7 +419,9 @@ export default function NewTransactionPage() {
                 const transactionData: any = {
                     beneficiaryId: Number(formData.beneficiaryId),
                     clientPresencialId: Number(formData.clientPresencialId),
+                    transactionType: transactionType,
                     amountCOP: formData.amountCOP ? parseFloat(formData.amountCOP.replace(/\./g, '')) : undefined,
+                    amountUSD: formData.amountUSD ? parseFloat(formData.amountUSD) : undefined,
                     amountBs: formData.amountBs ? parseFloat(formData.amountBs) : undefined,
                     notes: formData.notes || undefined,
                 };
@@ -698,7 +803,14 @@ export default function NewTransactionPage() {
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            onClick={handleOpenCustomRateModal}
+                                            onClick={() => {
+                                                if (transactionType === 'normal') {
+                                                    handleOpenCustomRateModal();
+                                                } else {
+                                                    // Para USD, activar y abrir modal también para poder editar
+                                                    handleOpenCustomRateModal();
+                                                }
+                                            }}
                                             className="w-full sm:w-auto"
                                         >
                                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -707,10 +819,25 @@ export default function NewTransactionPage() {
                                             Utilizar tasa diferente
                                         </Button>
                                     ) : (
-                                        <div className="flex flex-col sm:flex-row gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2 items-center">
                                             <span className="text-sm text-green-600 font-medium px-3 py-2 bg-green-50 rounded-lg">
                                                 ✓ Usando tasa personalizada: {parseFloat(customRate).toFixed(2)}
                                             </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (transactionType === 'normal') {
+                                                        handleOpenCustomRateModal();
+                                                    } else {
+                                                        handleOpenCustomRateModal();
+                                                    }
+                                                }}
+                                                className="text-xs"
+                                            >
+                                                Editar tasa
+                                            </Button>
                                             <Button
                                                 type="button"
                                                 variant="ghost"
@@ -723,51 +850,244 @@ export default function NewTransactionPage() {
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <Input
-                                            label="Monto en COP"
-                                            type="text"
-                                            inputMode="numeric"
-                                            placeholder="0.00"
-                                            value={formData.amountCOP}
-                                            onChange={(e) => handleAmountCOPChange(e.target.value)}
-                                            error={errors.amount}
-                                            icon={
-                                                <span className="text-gray-500 font-medium">$</span>
-                                            }
-                                        />
+                                {/* Selector de tipo de transacción */}
+                                <div className="mb-6">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className="block text-sm font-medium text-gray-700">Tipo de Transacción</label>
+                                        {transactionType === 'normal' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTransactionType('dolares');
+                                                    setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                                }}
+                                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                                            >
+                                                ¿PayPal, Zelle o Dólares?
+                                            </button>
+                                        )}
+                                        {transactionType !== 'normal' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTransactionType('normal');
+                                                    setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                                }}
+                                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                            >
+                                                ← Volver a Normal (COP)
+                                            </button>
+                                        )}
                                     </div>
 
-                                    <div>
-                                        <Input
-                                            label="Monto en Bs"
-                                            type="text"
-                                            inputMode="numeric"
-                                            placeholder="0"
-                                            value={formData.amountBs}
-                                            onChange={(e) => handleAmountBsChange(e.target.value.replace(/\D/g, ''))}
-                                            error={errors.amount}
-                                            icon={
-                                                <span className="text-gray-500 font-medium">Bs</span>
-                                            }
-                                        />
-                                    </div>
+                                    {transactionType === 'normal' ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setTransactionType('normal');
+                                                setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                            }}
+                                            className="w-full p-4 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-900 transition-all"
+                                        >
+                                            <div className="font-bold text-lg">Normal (COP)</div>
+                                            <div className="text-xs text-gray-600 mt-1">Tasa: {allRates.actual?.saleRate ? Number(allRates.actual.saleRate).toFixed(2) : '-'}</div>
+                                        </button>
+                                    ) : (
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTransactionType('dolares');
+                                                    setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                                }}
+                                                className={`p-3 rounded-lg border-2 transition-all text-sm ${
+                                                    transactionType === 'dolares'
+                                                        ? 'border-green-600 bg-green-50 text-green-900'
+                                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-semibold">💵 Dólares</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">{allRates.dolares?.saleRate ? Number(allRates.dolares.saleRate).toFixed(2) : '-'}</div>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTransactionType('paypal');
+                                                    setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                                }}
+                                                className={`p-3 rounded-lg border-2 transition-all text-sm ${
+                                                    transactionType === 'paypal'
+                                                        ? 'border-purple-600 bg-purple-50 text-purple-900'
+                                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-semibold">💳 PayPal</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">{allRates.paypal?.saleRate ? Number(allRates.paypal.saleRate).toFixed(2) : '-'}</div>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTransactionType('zelle');
+                                                    setFormData({ ...formData, amountCOP: '', amountUSD: '', amountBs: '' });
+                                                }}
+                                                className={`p-3 rounded-lg border-2 transition-all text-sm ${
+                                                    transactionType === 'zelle'
+                                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-semibold">💰 Zelle</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">{allRates.zelle?.saleRate ? Number(allRates.zelle.saleRate).toFixed(2) : '-'}</div>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {formData.amountCOP && formData.amountBs && (
-                                    <div className={`mt-4 p-4 border rounded-lg ${useCustomRate ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                                        <p className={`text-sm ${useCustomRate ? 'text-green-900' : 'text-blue-900'}`}>
-                                            <span className="font-semibold">Conversión:</span> ${formData.amountCOP} COP = {parseInt(formData.amountBs).toLocaleString('es-CO')} Bs
-                                            <span className={`ml-2 ${useCustomRate ? 'text-green-700' : 'text-blue-700'}`}>
-                                                (Tasa {useCustomRate ? 'personalizada' : 'oficial'}: {Number(getActiveRate()).toFixed(2)})
-                                            </span>
-                                        </p>
-                                        {useCustomRate && (
-                                            <p className="text-xs text-green-700 mt-1">
-                                                ⚠️ Esta transacción usará una tasa personalizada consultada con el administrador
-                                            </p>
-                                        )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {transactionType === 'normal' ? (
+                                        <>
+                                            <div>
+                                                <Input
+                                                    label="Monto en COP"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="0.00"
+                                                    value={formData.amountCOP}
+                                                    onChange={(e) => handleAmountCOPChange(e.target.value)}
+                                                    error={errors.amount}
+                                                    icon={
+                                                        <span className="text-gray-500 font-medium">$</span>
+                                                    }
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <Input
+                                                    label="Monto en Bs"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="0"
+                                                    value={formData.amountBs}
+                                                    onChange={(e) => handleAmountBsChange(e.target.value.replace(/\D/g, ''))}
+                                                    error={errors.amount}
+                                                    icon={
+                                                        <span className="text-gray-500 font-medium">Bs</span>
+                                                    }
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <Input
+                                                    label="Monto en USD"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="0.00"
+                                                    value={formData.amountUSD}
+                                                    onChange={(e) => handleAmountUSDChange(e.target.value)}
+                                                    error={errors.amount}
+                                                    icon={
+                                                        <span className="text-gray-500 font-medium">$</span>
+                                                    }
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <Input
+                                                    label="Monto en Bs"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="0"
+                                                    value={formData.amountBs}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value.replace(/\D/g, '');
+                                                        setFormData({ ...formData, amountBs: value, amountUSD: '' });
+                                                        
+                                                        if (value) {
+                                                            // Usar tasa personalizada si está activa, sino usar la tasa del tipo de transacción
+                                                            let rate: number;
+                                                            if (useCustomRate && customRate) {
+                                                                rate = parseFloat(customRate);
+                                                            } else {
+                                                                const rateKey = transactionType;
+                                                                rate = allRates[rateKey]?.saleRate || 0;
+                                                            }
+                                                            
+                                                            if (rate) {
+                                                                const bs = parseFloat(value);
+                                                                const usd = (bs / rate).toFixed(2);
+                                                                setFormData({ ...formData, amountBs: value, amountUSD: usd });
+                                                            }
+                                                        }
+                                                    }}
+                                                    error={errors.amount}
+                                                    icon={
+                                                        <span className="text-gray-500 font-medium">Bs</span>
+                                                    }
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {((transactionType === 'normal' && formData.amountCOP && formData.amountBs) || 
+                                  (transactionType !== 'normal' && formData.amountUSD && formData.amountBs)) && (
+                                    <div className={`mt-4 p-4 border rounded-lg ${
+                                        transactionType === 'normal' 
+                                            ? (useCustomRate ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200')
+                                            : transactionType === 'dolares'
+                                            ? 'bg-green-50 border-green-200'
+                                            : transactionType === 'paypal'
+                                            ? 'bg-purple-50 border-purple-200'
+                                            : 'bg-indigo-50 border-indigo-200'
+                                    }`}>
+                                        <div className="space-y-2">
+                                            {transactionType === 'normal' ? (
+                                                <>
+                                                    <p className={`text-sm ${useCustomRate ? 'text-green-900' : 'text-blue-900'}`}>
+                                                        <span className="font-semibold">Conversión:</span> ${formData.amountCOP} COP = {parseInt(formData.amountBs).toLocaleString('es-CO')} Bs
+                                                        <span className={`ml-2 ${useCustomRate ? 'text-green-700' : 'text-blue-700'}`}>
+                                                            (Tasa {useCustomRate ? 'personalizada' : 'oficial'}: {Number(getActiveRate()).toFixed(2)})
+                                                        </span>
+                                                    </p>
+                                                    {formData.amountBs && allRates.banco_central?.saleRate && (
+                                                        <p className="text-xs text-gray-600">
+                                                            💵 Equivalente aprox: ${(parseFloat(formData.amountBs) / Number(allRates.banco_central.saleRate)).toFixed(2)} USD
+                                                        </p>
+                                                    )}
+                                                    {useCustomRate && (
+                                                        <p className="text-xs text-green-700">
+                                                            ⚠️ Esta transacción usará una tasa personalizada consultada con el administrador
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <p className={`text-sm ${
+                                                        transactionType === 'dolares' ? 'text-green-900' : 
+                                                        transactionType === 'paypal' ? 'text-purple-900' : 'text-indigo-900'
+                                                    }`}>
+                                                        <span className="font-semibold">Conversión:</span> ${formData.amountUSD} USD = {parseInt(formData.amountBs).toLocaleString('es-CO')} Bs
+                                                    </p>
+                                                    <p className={`text-xs ${useCustomRate ? 'text-green-700' : 'text-gray-600'}`}>
+                                                        Tasa {useCustomRate ? 'personalizada' : (transactionType === 'dolares' ? 'Dólares' : transactionType === 'paypal' ? 'PayPal' : 'Zelle')}: {useCustomRate ? Number(customRate).toFixed(2) : (
+                                                            (() => {
+                                                                const rate = transactionType === 'dolares' ? allRates.dolares?.saleRate : 
+                                                                             transactionType === 'paypal' ? allRates.paypal?.saleRate : 
+                                                                             allRates.zelle?.saleRate;
+                                                                return rate ? Number(rate).toFixed(2) : '-';
+                                                            })()
+                                                        )}
+                                                    </p>
+                                                    {useCustomRate && (
+                                                        <p className="text-xs text-green-700">
+                                                            ✓ Usando tasa personalizada para esta transacción USD
+                                                        </p>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </Card>
@@ -923,7 +1243,7 @@ export default function NewTransactionPage() {
                         </div>
                     </div>
 
-                    {isVendorVenezuela && (
+                    {isVendorVenezuela && transactionType === 'normal' && (
                         <div className="p-4 bg-purple-50 border-2 border-purple-300 rounded-xl">
                             <div className="flex gap-3">
                                 <svg className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -939,7 +1259,23 @@ export default function NewTransactionPage() {
                         </div>
                     )}
 
-                    {currentRate && (
+                    {transactionType !== 'normal' && (
+                        <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                            <div className="flex gap-3">
+                                <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <p className="text-sm font-medium text-blue-900">Tasa Personalizada para Transacción USD</p>
+                                    <p className="text-xs text-blue-800 mt-1">
+                                        Esta tasa solo afecta el cálculo de bolívares. No afecta comisiones ya que las transacciones USD se manejan aparte con el Administrador
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {transactionType === 'normal' && currentRate && (
                         <div className="p-3 bg-gray-50 rounded-lg">
                             <p className="text-sm text-gray-600">
                                 Tasa oficial actual: <span className="font-bold text-gray-900">{parseFloat(currentRate.saleRate.toString()).toFixed(2)} Bs/COP</span>
@@ -947,9 +1283,24 @@ export default function NewTransactionPage() {
                         </div>
                     )}
 
+                    {transactionType !== 'normal' && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-600">
+                                Tasa oficial {transactionType === 'dolares' ? 'Dólares' : transactionType === 'paypal' ? 'PayPal' : 'Zelle'}: <span className="font-bold text-gray-900">
+                                    {(() => {
+                                        const rate = transactionType === 'dolares' ? allRates.dolares?.saleRate : 
+                                                     transactionType === 'paypal' ? allRates.paypal?.saleRate : 
+                                                     allRates.zelle?.saleRate;
+                                        return rate ? Number(rate).toFixed(2) : '-';
+                                    })()} Bs/USD
+                                </span>
+                            </p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Tasa Personalizada (Bs/COP) *
+                            Tasa Personalizada ({transactionType === 'normal' ? 'Bs/COP' : 'Bs/USD'}) *
                         </label>
                         <input
                             type="number"
@@ -961,28 +1312,30 @@ export default function NewTransactionPage() {
                             className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
                         />
                         <p className="mt-2 text-xs text-gray-500">
-                            Ingresa la tasa con hasta 2 decimales (ej: 0.02)
+                            Ingresa la tasa con hasta 2 decimales (ej: {transactionType === 'normal' ? '6.70' : '300.00'})
                         </p>
                     </div>
 
-                    <div className="p-4 border-2 border-blue-200 rounded-xl bg-blue-50">
-                        <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={customRateConfirmed}
-                                onChange={(e) => setCustomRateConfirmed(e.target.checked)}
-                                className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                            />
-                            <div className="flex-1">
-                                <p className="font-semibold text-blue-900 text-sm">
-                                    Confirmo haber consultado previamente esta tasa personalizada con el administrador
-                                </p>
-                                <p className="text-xs text-blue-700 mt-1">
-                                    Esta confirmación es obligatoria para aplicar una tasa diferente a la oficial
-                                </p>
-                            </div>
-                        </label>
-                    </div>
+                    {transactionType === 'normal' && (
+                        <div className="p-4 border-2 border-blue-200 rounded-xl bg-blue-50">
+                            <label className="flex items-start gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={customRateConfirmed}
+                                    onChange={(e) => setCustomRateConfirmed(e.target.checked)}
+                                    className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                                />
+                                <div className="flex-1">
+                                    <p className="font-semibold text-blue-900 text-sm">
+                                        Confirmo haber consultado previamente esta tasa personalizada con el administrador
+                                    </p>
+                                    <p className="text-xs text-blue-700 mt-1">
+                                        Esta confirmación es obligatoria para aplicar una tasa diferente a la oficial
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+                    )}
 
                     <div className="flex flex-col sm:flex-row gap-3 pt-4">
                         <Button

@@ -10,6 +10,8 @@ import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto'
 import { RatesService } from '../rates/rates.service';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { TransactionStatus } from '../../common/enums/transaction-status.enum';
+import { TransactionType } from '../../common/enums/transaction-type.enum';
+import { RateType } from '../../common/enums/rate-type.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { SetPurchaseRateDto } from './dto/set-purchase-rate.dto';
 import { VenezuelaPayment } from './entities/venezuela-payment.entity';
@@ -17,6 +19,8 @@ import { CreateVenezuelaPaymentDto } from './dto/create-venezuela-payment.dto';
 import { VenezuelaDebtSummary, TransactionDebtDetail, VenezuelaPaymentDetail } from './dto/venezuela-debt-detail.dto';
 import { StorageService } from '../../common/services/storage.service';
 import { AccountsService } from '../accounts/accounts.service';
+import { AccountTransaction, AccountTransactionType } from '../accounts/entities/account-transaction.entity';
+import { Account } from '../accounts/entities/account.entity';
 
 /**
  * Parsea una fecha en formato YYYY-MM-DD a un objeto Date en zona horaria local
@@ -51,6 +55,10 @@ export class TransactionsService {
     private beneficiariesRepository: Repository<Beneficiary>,
     @InjectRepository(VenezuelaPayment)
     private venezuelaPaymentsRepository: Repository<VenezuelaPayment>,
+    @InjectRepository(AccountTransaction)
+    private accountTransactionsRepository: Repository<AccountTransaction>,
+    @InjectRepository(Account)
+    private accountsRepository: Repository<Account>,
     private ratesService: RatesService,
     private storageService: StorageService,
     private accountsService: AccountsService,
@@ -59,6 +67,7 @@ export class TransactionsService {
   async create(createTransactionDto: CreateTransactionDto, user: any): Promise<Transaction> {
     // Obtener tasa actual
     const currentRate = await this.ratesService.getCurrentRate();
+    const transactionType = createTransactionDto.transactionType || TransactionType.NORMAL;
 
     // Obtener Destinatario completo
     const beneficiary = await this.beneficiariesRepository.findOne({
@@ -69,20 +78,57 @@ export class TransactionsService {
       throw new NotFoundException('Destinatario no encontrado');
     }
 
-    // Calcular montos según la tasa
-    let amountCOP: number;
+    // Calcular montos según el tipo de transacción
+    let amountCOP: number | null = null;
+    let amountUSD: number | null = null;
     let amountBs: number;
-    const rateToUse = createTransactionDto.customRate || currentRate.saleRate;
-    const hasCustomRate = !!createTransactionDto.customRate; // Bandera para tasa personalizada
+    let rateToUse: number;
+    const hasCustomRate = !!createTransactionDto.customRate;
 
-    if (createTransactionDto.amountCOP) {
-      amountCOP = createTransactionDto.amountCOP;
-      amountBs = amountCOP / rateToUse;
-    } else if (createTransactionDto.amountBs) {
-      amountBs = createTransactionDto.amountBs;
-      amountCOP = amountBs * rateToUse;
+    if (transactionType === TransactionType.NORMAL) {
+      // Transacción normal: COP ↔ Bs usando tasa actual
+      rateToUse = createTransactionDto.customRate || currentRate.saleRate;
+
+      if (createTransactionDto.amountCOP) {
+        amountCOP = createTransactionDto.amountCOP;
+        amountBs = amountCOP / rateToUse;
+      } else if (createTransactionDto.amountBs) {
+        amountBs = createTransactionDto.amountBs;
+        amountCOP = amountBs * rateToUse;
+      } else {
+        throw new Error('Debe proporcionar amountCOP o amountBs');
+      }
     } else {
-      throw new Error('Debe proporcionar amountCOP o amountBs');
+      // Transacciones PayPal, Zelle, Dólares: USD → Bs
+      if (!createTransactionDto.amountUSD) {
+        throw new Error('Debe proporcionar amountUSD para transacciones PayPal, Zelle o Dólares');
+      }
+
+      amountUSD = createTransactionDto.amountUSD;
+
+      // Si hay tasa personalizada, usarla. Sino, obtener la tasa correspondiente según el tipo
+      if (createTransactionDto.customRate) {
+        rateToUse = createTransactionDto.customRate;
+      } else {
+        // Obtener la tasa correspondiente según el tipo
+        if (transactionType === TransactionType.PAYPAL) {
+          const paypalRate = await this.ratesService.getCurrentRateByType(RateType.PAYPAL);
+          rateToUse = paypalRate ? paypalRate.saleRate : 0;
+        } else if (transactionType === TransactionType.ZELLE) {
+          const zelleRate = await this.ratesService.getCurrentRateByType(RateType.ZELLE);
+          rateToUse = zelleRate ? zelleRate.saleRate : 0;
+        } else if (transactionType === TransactionType.DOLARES) {
+          const dolaresRate = await this.ratesService.getCurrentRateByType(RateType.DOLARES);
+          rateToUse = dolaresRate ? dolaresRate.saleRate : 0;
+        }
+
+        if (!rateToUse || rateToUse === 0) {
+          throw new Error(`No se encontró tasa para ${transactionType}`);
+        }
+      }
+
+      // USD × tasa_respectiva = Bs
+      amountBs = amountUSD * rateToUse;
     }
 
     // Calcular la comisión para esta transacción
@@ -94,12 +140,15 @@ export class TransactionsService {
     }
 
     const transaction = this.transactionsRepository.create({
-      ...createTransactionDto,
+      transactionType: transactionType as TransactionType,
       amountCOP,
+      amountUSD,
       amountBs,
       saleRate: rateToUse,
-      hasCustomRate, // Agregar la bandera
-      transactionCommission, // Guardar la comisión específica
+      hasCustomRate,
+      transactionCommission,
+      notes: createTransactionDto.notes,
+      comprobanteCliente: createTransactionDto.comprobanteCliente,
       createdBy: { id: user.id } as any,
       beneficiary: { id: beneficiary.id } as any,
 
@@ -112,7 +161,7 @@ export class TransactionsService {
       beneficiaryPhone: beneficiary.phone || null,
       beneficiaryIsPagoMovil: beneficiary.isPagoMovil || false,
 
-      lastEditedAt: new Date(), // Initialize timer
+      lastEditedAt: new Date(),
     });
 
     // Asociar cliente si es necesario
@@ -141,13 +190,16 @@ export class TransactionsService {
       ...createTransactionDto,
       beneficiaryId: parseInt(createTransactionDto.beneficiaryId, 10),
       clientPresencialId: createTransactionDto.clientPresencialId ? parseInt(createTransactionDto.clientPresencialId, 10) : undefined,
+      transactionType: createTransactionDto.transactionType || TransactionType.NORMAL,
       amountCOP: createTransactionDto.amountCOP ? parseFloat(createTransactionDto.amountCOP) : undefined,
+      amountUSD: createTransactionDto.amountUSD ? parseFloat(createTransactionDto.amountUSD) : undefined,
       amountBs: createTransactionDto.amountBs ? parseFloat(createTransactionDto.amountBs) : undefined,
       customRate: createTransactionDto.customRate ? parseFloat(createTransactionDto.customRate) : undefined,
     };
 
     // Obtener tasa actual
     const currentRate = await this.ratesService.getCurrentRate();
+    const transactionType = parsedDto.transactionType as TransactionType;
 
     // Obtener Destinatario completo
     const beneficiary = await this.beneficiariesRepository.findOne({
@@ -158,20 +210,57 @@ export class TransactionsService {
       throw new NotFoundException('Destinatario no encontrado');
     }
 
-    // Calcular montos según la tasa
-    let amountCOP: number;
+    // Calcular montos según el tipo de transacción
+    let amountCOP: number | null = null;
+    let amountUSD: number | null = null;
     let amountBs: number;
-    const rateToUse = parsedDto.customRate || currentRate.saleRate;
+    let rateToUse: number;
     const hasCustomRate = !!parsedDto.customRate;
 
-    if (parsedDto.amountCOP) {
-      amountCOP = parsedDto.amountCOP;
-      amountBs = amountCOP / rateToUse;
-    } else if (parsedDto.amountBs) {
-      amountBs = parsedDto.amountBs;
-      amountCOP = amountBs * rateToUse;
+    if (transactionType === TransactionType.NORMAL) {
+      // Transacción normal: COP ↔ Bs usando tasa actual
+      rateToUse = parsedDto.customRate || currentRate.saleRate;
+
+      if (parsedDto.amountCOP) {
+        amountCOP = parsedDto.amountCOP;
+        amountBs = amountCOP / rateToUse;
+      } else if (parsedDto.amountBs) {
+        amountBs = parsedDto.amountBs;
+        amountCOP = amountBs * rateToUse;
+      } else {
+        throw new Error('Debe proporcionar amountCOP o amountBs');
+      }
     } else {
-      throw new Error('Debe proporcionar amountCOP o amountBs');
+      // Transacciones PayPal, Zelle, Dólares: USD → Bs
+      if (!parsedDto.amountUSD) {
+        throw new Error('Debe proporcionar amountUSD para transacciones PayPal, Zelle o Dólares');
+      }
+
+      amountUSD = parsedDto.amountUSD;
+
+      // Si hay tasa personalizada, usarla. Sino, obtener la tasa correspondiente según el tipo
+      if (parsedDto.customRate) {
+        rateToUse = parsedDto.customRate;
+      } else {
+        // Obtener la tasa correspondiente según el tipo
+        if (transactionType === TransactionType.PAYPAL) {
+          const paypalRate = await this.ratesService.getCurrentRateByType(RateType.PAYPAL);
+          rateToUse = paypalRate ? paypalRate.saleRate : 0;
+        } else if (transactionType === TransactionType.ZELLE) {
+          const zelleRate = await this.ratesService.getCurrentRateByType(RateType.ZELLE);
+          rateToUse = zelleRate ? zelleRate.saleRate : 0;
+        } else if (transactionType === TransactionType.DOLARES) {
+          const dolaresRate = await this.ratesService.getCurrentRateByType(RateType.DOLARES);
+          rateToUse = dolaresRate ? dolaresRate.saleRate : 0;
+        }
+
+        if (!rateToUse || rateToUse === 0) {
+          throw new Error(`No se encontró tasa para ${transactionType}`);
+        }
+      }
+
+      // USD × tasa_respectiva = Bs
+      amountBs = amountUSD * rateToUse;
     }
 
     // Calcular la comisión para esta transacción
@@ -189,13 +278,16 @@ export class TransactionsService {
     }
 
     const transaction = this.transactionsRepository.create({
-      ...parsedDto,
+      transactionType: transactionType as TransactionType,
       amountCOP,
+      amountUSD,
       amountBs,
       saleRate: rateToUse,
       hasCustomRate,
-      transactionCommission, // Guardar la comisión específica
+      transactionCommission,
       vendorPaymentProof,
+      notes: parsedDto.notes,
+      comprobanteCliente: parsedDto.comprobanteCliente,
       createdBy: { id: user.id } as any,
       beneficiary: { id: beneficiary.id } as any,
 
@@ -209,7 +301,7 @@ export class TransactionsService {
       beneficiaryIsPagoMovil: beneficiary.isPagoMovil || false,
 
       lastEditedAt: new Date(),
-    }) as unknown as Transaction;
+    });
 
     // Asociar cliente si es necesario
     if (user.role === UserRole.CLIENTE) {
@@ -237,10 +329,10 @@ export class TransactionsService {
     }
 
     // Crear entrada en historial
-    const historyMessage = file && vendorPaymentProof 
+    const historyMessage = file && vendorPaymentProof
       ? 'Transacción creada con comprobante de pago (marcada como pagada)'
       : 'Transacción creada sin comprobante de pago (pendiente de pago)';
-    
+
     await this.createHistoryEntry(
       savedTransaction.id,
       TransactionStatus.PENDIENTE,
@@ -464,7 +556,7 @@ export class TransactionsService {
     }
 
     const whereCondition: any = { id: transactionId };
-    
+
     // Si es vendedor, solo puede desmarcar sus propias transacciones
     // Si es admin, puede desmarcar cualquier transacción
     if (isVendor) {
@@ -510,7 +602,7 @@ export class TransactionsService {
     await this.createHistoryEntry(
       transactionId,
       transaction.status,
-      user.role === 'admin_colombia' 
+      user.role === 'admin_colombia'
         ? 'Pago rechazado por administrador. La transacción volvió a estar en pendiente de pago.'
         : 'Pago desmarcado. La transacción volvió a estar en pendiente de pago.',
       user.id,
@@ -805,6 +897,7 @@ export class TransactionsService {
     }
 
     // Buscar transacciones completadas del vendedor en el rango de fechas (que no estén pagadas)
+    // SOLO transacciones normales (excluye PayPal, Zelle, Dólares)
     const queryBuilder = this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
@@ -816,24 +909,26 @@ export class TransactionsService {
       .andWhere('transaction.isPaidByVendor = :isPaid', { isPaid: false })
       .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
       .andWhere('transaction.createdAt <= :dateTo', { dateTo })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .orderBy('transaction.createdAt', 'DESC');
 
     const transactions = await queryBuilder.getMany();
 
-    // Calcular deuda total
+    // Calcular deuda total (solo transacciones normales con COP)
     const totalDebt = transactions.reduce((sum, transaction) => {
       const amount = Number(transaction.amountCOP) || 0;
       return sum + amount;
     }, 0);
 
-    // Calcular total pagado en el mismo rango
+    // Calcular total pagado en el mismo rango (solo transacciones normales)
     const paidQueryBuilder = this.transactionsRepository
       .createQueryBuilder('transaction')
       .where('transaction.createdBy.id = :userId', { userId: user.id })
       .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPaidByVendor = :isPaid', { isPaid: true })
       .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
-      .andWhere('transaction.createdAt <= :dateTo', { dateTo });
+      .andWhere('transaction.createdAt <= :dateTo', { dateTo })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL });
 
     const paidResult = await paidQueryBuilder.select('SUM(transaction.amountCOP)', 'sum').getRawOne();
     const paidAmount = Number(paidResult.sum) || 0;
@@ -897,6 +992,7 @@ export class TransactionsService {
       .where('transaction.createdBy.id = :userId', { userId })
       .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPaidByVendor = :isPaid', { isPaid: isPaid === 'true' })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
       .andWhere('transaction.createdAt <= :dateTo', { dateTo })
       .orderBy('transaction.createdAt', 'DESC')
@@ -954,7 +1050,7 @@ export class TransactionsService {
             console.error(`Error generating signed URL for vendorPaymentProof of transaction ${tx.id}:`, error);
           }
         }
-        
+
         // Generar URL firmada para comprobante de Venezuela
         if (tx.comprobanteVenezuela) {
           try {
@@ -965,7 +1061,7 @@ export class TransactionsService {
             console.error(`Error generating signed URL for comprobanteVenezuela of transaction ${tx.id}:`, error);
           }
         }
-        
+
         return tx;
       })
     );
@@ -973,7 +1069,7 @@ export class TransactionsService {
     return transactionsWithSignedUrls;
   }
 
-  async completeTransfer(id: number, voucherUrl: string, accountId: number | null, user: any): Promise<Transaction> {
+  async completeTransfer(id: number, voucherUrl: string, accountId: number | null, bankCommissionPercentage: number | null, user: any): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({
       where: { id },
       relations: ['createdBy'],
@@ -992,12 +1088,21 @@ export class TransactionsService {
       throw new BadRequestException('El comprobante del vendedor debe ser verificado antes de completar la transferencia');
     }
 
-    // Si se proporciona accountId, restar el saldo de la cuenta
+    // Guardar el porcentaje de comisión bancaria si se proporciona
+    if (bankCommissionPercentage !== null && bankCommissionPercentage !== undefined) {
+      transaction.bankCommissionPercentage = bankCommissionPercentage;
+    }
+
+    // Si se proporciona accountId, restar el saldo de la cuenta (monto + comisión bancaria)
     if (accountId) {
       const amountBs = parseFloat(transaction.amountBs.toString());
+      const commissionPercentage = bankCommissionPercentage || 0;
+      const commissionAmount = (amountBs * commissionPercentage) / 100;
+      const totalToWithdraw = amountBs + commissionAmount;
+
       try {
-        await this.accountsService.withdrawBalance(accountId, amountBs, id, user.id);
-        this.logger.log(`Saldo retirado de cuenta ${accountId}: ${amountBs} Bs para transacción #${id}`);
+        await this.accountsService.withdrawBalance(accountId, totalToWithdraw, id, user.id, commissionAmount);
+        this.logger.log(`Saldo retirado de cuenta ${accountId}: ${totalToWithdraw} Bs (${amountBs} Bs giro + ${commissionAmount} Bs comisión ${commissionPercentage}%) para transacción #${id}`);
       } catch (error) {
         // Si falla el retiro, lanzar el error para que no se complete la transacción
         throw error;
@@ -1014,13 +1119,82 @@ export class TransactionsService {
     await this.createHistoryEntry(
       id,
       TransactionStatus.COMPLETADO,
-      accountId 
-        ? 'Transferencia completada por administrador Venezuela con retiro de cuenta'
+      accountId
+        ? `Transferencia completada por administrador Venezuela con retiro de cuenta${bankCommissionPercentage ? ` (comisión bancaria: ${bankCommissionPercentage}%)` : ''}`
         : 'Transferencia completada por administrador Venezuela',
       user.id,
     );
 
     return updated;
+  }
+
+  async updateBankCommission(id: number, bankCommissionPercentage: number, user: any): Promise<Transaction> {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+      relations: ['createdBy'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transacción con ID ${id} no encontrada`);
+    }
+
+    if (transaction.status !== TransactionStatus.COMPLETADO) {
+      throw new BadRequestException('Solo se puede actualizar la comisión bancaria de transacciones completadas');
+    }
+
+    const oldCommissionPercentage = transaction.bankCommissionPercentage || 0;
+    const amountBs = parseFloat(transaction.amountBs.toString());
+    const oldCommissionAmount = (amountBs * oldCommissionPercentage) / 100;
+    const newCommissionAmount = (amountBs * bankCommissionPercentage) / 100;
+    const difference = newCommissionAmount - oldCommissionAmount;
+
+    // Actualizar el porcentaje
+    transaction.bankCommissionPercentage = bankCommissionPercentage;
+    await this.transactionsRepository.save(transaction);
+
+    // Si hay diferencia, ajustar el saldo de la cuenta
+    if (difference !== 0) {
+      try {
+        // Buscar la transacción de cuenta asociada para obtener el accountId
+        const accountTransaction = await this.accountTransactionsRepository.findOne({
+          where: { transaction: { id } },
+          relations: ['account'],
+        });
+
+        if (accountTransaction && accountTransaction.account) {
+          const account = await this.accountsRepository.findOne({
+            where: { id: accountTransaction.account.id },
+          });
+
+          if (account) {
+            const currentBalance = parseFloat(account.balance.toString());
+            // Si la nueva comisión es mayor, restar la diferencia
+            // Si la nueva comisión es menor, sumar la diferencia (devolver)
+            const newBalance = currentBalance - difference;
+            account.balance = newBalance;
+            await this.accountsRepository.save(account);
+
+            // Registrar la transacción de ajuste
+            await this.accountTransactionsRepository.save({
+              account: { id: account.id } as any,
+              amount: Math.abs(difference),
+              type: difference > 0 ? AccountTransactionType.WITHDRAWAL : AccountTransactionType.DEPOSIT,
+              transaction: { id } as any,
+              description: `Ajuste de comisión bancaria para transacción #${id} (${oldCommissionPercentage}% → ${bankCommissionPercentage}%)`,
+              balanceBefore: currentBalance,
+              balanceAfter: newBalance,
+            });
+
+            this.logger.log(`Comisión bancaria actualizada para transacción #${id}: ${oldCommissionPercentage}% → ${bankCommissionPercentage}%. Ajuste de saldo: ${difference > 0 ? '-' : '+'}${Math.abs(difference).toFixed(2)} Bs`);
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Error ajustando saldo al actualizar comisión bancaria para transacción #${id}:`, error);
+        // No lanzamos el error para que la actualización del porcentaje se guarde igual
+      }
+    }
+
+    return transaction;
   }
 
   async verifyVendorPaymentProof(id: number, user: any): Promise<Transaction> {
@@ -1285,13 +1459,21 @@ export class TransactionsService {
       dateFrom.setHours(0, 0, 0, 0);
     }
 
-    // Get all transactions in the date range
+    // Get all transactions in the date range (SOLO normales para estadísticas principales)
     const transactions = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .getMany();
 
-    // Calculate stats
+    // Obtener transacciones USD para sección separada
+    const usdTransactions = await this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .andWhere('transaction.transactionType IN (:...usdTypes)', { usdTypes: [TransactionType.PAYPAL, TransactionType.ZELLE, TransactionType.DOLARES] })
+      .getMany();
+
+    // Calculate stats (SOLO transacciones normales)
     const totalTransactions = transactions.length;
     const completedTransactions = transactions.filter(t => t.status === TransactionStatus.COMPLETADO);
     const rejectedTransactions = transactions.filter(t => t.status === TransactionStatus.RECHAZADO);
@@ -1304,7 +1486,7 @@ export class TransactionsService {
       t.status === TransactionStatus.PENDIENTE_VENEZUELA
     );
 
-    const totalCOP = completedTransactions.reduce((sum, t) => sum + Number(t.amountCOP), 0);
+    const totalCOP = completedTransactions.reduce((sum, t) => sum + (Number(t.amountCOP) || 0), 0);
     const totalBs = completedTransactions.reduce((sum, t) => sum + Number(t.amountBs), 0);
 
     // Group by day for chart data (usando fecha local, no UTC)
@@ -1329,6 +1511,20 @@ export class TransactionsService {
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
+    // Calcular métricas USD
+    const usdCompleted = usdTransactions.filter(t => t.status === TransactionStatus.COMPLETADO);
+    const usdMetrics = {
+      totalTransactions: usdTransactions.length,
+      completedCount: usdCompleted.length,
+      totalAmountUSD: usdCompleted.reduce((sum, t) => sum + (Number(t.amountUSD) || 0), 0),
+      totalAmountBs: usdCompleted.reduce((sum, t) => sum + Number(t.amountBs), 0),
+      byType: {
+        dolares: usdCompleted.filter(tx => tx.transactionType === TransactionType.DOLARES).length,
+        paypal: usdCompleted.filter(tx => tx.transactionType === TransactionType.PAYPAL).length,
+        zelle: usdCompleted.filter(tx => tx.transactionType === TransactionType.ZELLE).length,
+      },
+    };
+
     return {
       summary: {
         totalTransactions,
@@ -1339,11 +1535,12 @@ export class TransactionsService {
         totalCOP,
         totalBs,
         averageRate: completedTransactions.length > 0
-          ? completedTransactions.reduce((sum, t) => sum + Number(t.saleRate), 0) / completedTransactions.length
+          ? completedTransactions.reduce((sum, t) => sum + (Number(t.saleRate) || 0), 0) / completedTransactions.length
           : 0,
       },
       chartData,
       dateRange: { from: dateFrom, to: dateTo },
+      usdMetrics,
     };
   }
 
@@ -1440,29 +1637,45 @@ export class TransactionsService {
       dateTo.setHours(23, 59, 59, 999);
     }
 
-    // Para comisiones: TODAS las transacciones completadas de vendedores de Admin Colombia (no necesita tasa de compra)
+    // Para comisiones: SOLO transacciones normales completadas de vendedores de Admin Colombia (no necesita tasa de compra)
     const allCompletedTransactions = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'user')
       .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
-      .andWhere('(user.adminId = :adminId OR (user.role = :role AND user.adminId IS NULL))', { 
-        adminId: ADMIN_COLOMBIA_ID, 
-        role: UserRole.VENDEDOR 
+      .andWhere('(user.adminId = :adminId OR (user.role = :role AND user.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
       })
       .orderBy('transaction.createdAt', 'ASC')
       .getMany();
 
-    // Para ganancias/deudas: solo transacciones con tasa de compra definitiva de vendedores de Admin Colombia
+    // Para ganancias/deudas: solo transacciones normales con tasa de compra definitiva de vendedores de Admin Colombia
     const transactionsWithPurchaseRate = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'user')
       .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPurchaseRateSet = :isPurchaseRateSet', { isPurchaseRateSet: true })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
-      .andWhere('(user.adminId = :adminId OR (user.role = :role AND user.adminId IS NULL))', { 
-        adminId: ADMIN_COLOMBIA_ID, 
-        role: UserRole.VENDEDOR 
+      .andWhere('(user.adminId = :adminId OR (user.role = :role AND user.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
+      })
+      .orderBy('transaction.createdAt', 'ASC')
+      .getMany();
+
+    // Obtener transacciones USD para sección separada
+    const usdTransactions = await this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'user')
+      .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
+      .andWhere('transaction.transactionType IN (:...usdTypes)', { usdTypes: [TransactionType.PAYPAL, TransactionType.ZELLE, TransactionType.DOLARES] })
+      .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .andWhere('(user.adminId = :adminId OR (user.role = :role AND user.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
       })
       .orderBy('transaction.createdAt', 'ASC')
       .getMany();
@@ -1551,10 +1764,14 @@ export class TransactionsService {
 
       const vendorAgg = byVendor[vendorId];
       vendorAgg.adminColombiaEarnings += gananciaAdminColombia;
-      vendorAgg.amountOwedToVenezuela += deudaColombiaConVenezuela;
+
+      // Solo sumar a deuda pendiente si NO está pagada a Venezuela
+      if (!tx.isPaidToVenezuela) {
+        vendorAgg.amountOwedToVenezuela += deudaColombiaConVenezuela;
+        globalAmountOwedToVenezuela += deudaColombiaConVenezuela;
+      }
 
       globalAdminColombiaEarnings += gananciaAdminColombia;
-      globalAmountOwedToVenezuela += deudaColombiaConVenezuela;
     });
 
     // Calcular pendientes por vendedor
@@ -1568,6 +1785,18 @@ export class TransactionsService {
     );
     const hasTransactionsWithoutPurchaseRate = transactionsWithoutPurchaseRate.length > 0;
 
+    // Calcular métricas USD
+    const usdMetrics = {
+      totalTransactions: usdTransactions.length,
+      totalAmountUSD: usdTransactions.reduce((sum, tx) => sum + (Number(tx.amountUSD) || 0), 0),
+      totalAmountBs: usdTransactions.reduce((sum, tx) => sum + Number(tx.amountBs), 0),
+      byType: {
+        dolares: usdTransactions.filter(tx => tx.transactionType === TransactionType.DOLARES).length,
+        paypal: usdTransactions.filter(tx => tx.transactionType === TransactionType.PAYPAL).length,
+        zelle: usdTransactions.filter(tx => tx.transactionType === TransactionType.ZELLE).length,
+      },
+    };
+
     return {
       global: {
         totalCommission: globalCommissionTotal,
@@ -1580,6 +1809,7 @@ export class TransactionsService {
       },
       byVendor: Object.values(byVendor),
       dateRange: { from: dateFrom, to: dateTo },
+      usdMetrics,
     };
   }
 
@@ -1610,28 +1840,56 @@ export class TransactionsService {
       dateTo.setHours(23, 59, 59, 999);
     }
 
-    // Para ganancias/deudas: solo transacciones con tasa de compra definitiva
+    // Para ganancias/deudas: solo transacciones NORMALES con tasa de compra definitiva
+    // Filtrar por tipo normal O null, y asegurar que amountCOP no sea null (las USD tienen amountCOP null)
     const transactionsWithPurchaseRate = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'user')
       .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPurchaseRateSet = :isPurchaseRateSet', { isPurchaseRateSet: true })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
+      .andWhere('transaction.amountCOP IS NOT NULL') // Las transacciones USD tienen amountCOP null
       .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
       .orderBy('transaction.createdAt', 'ASC')
       .getMany();
 
-    // Detectar si hay transacciones completadas sin tasa de compra definitiva
-    const allCompletedTransactions = await this.transactionsRepository.find({
-      where: {
-        status: TransactionStatus.COMPLETADO,
-        createdAt: Between(dateFrom, dateTo),
-      },
-      relations: ['createdBy'],
-    });
+    // Detectar si hay transacciones completadas sin tasa de compra definitiva (SOLO normales)
+    // Filtrar por tipo normal O null, y asegurar que amountCOP no sea null (las USD tienen amountCOP null)
+    const allCompletedTransactions = await this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'user')
+      .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
+      .andWhere('transaction.amountCOP IS NOT NULL') // Las transacciones USD tienen amountCOP null
+      .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .getMany();
+
+    // Obtener transacciones USD para sección separada
+    const usdTransactions = await this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'user')
+      .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
+      .andWhere('transaction.transactionType IN (:...usdTypes)', { usdTypes: [TransactionType.PAYPAL, TransactionType.ZELLE, TransactionType.DOLARES] })
+      .andWhere('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .orderBy('transaction.createdAt', 'ASC')
+      .getMany();
+
     const transactionsWithoutPurchaseRate = allCompletedTransactions.filter(
       (tx) => !tx.isPurchaseRateSet || tx.purchaseRate === null,
     );
     const hasTransactionsWithoutPurchaseRate = transactionsWithoutPurchaseRate.length > 0;
+
+    // Calcular métricas USD
+    const usdMetrics = {
+      totalTransactions: usdTransactions.length,
+      totalAmountUSD: usdTransactions.reduce((sum, tx) => sum + (Number(tx.amountUSD) || 0), 0),
+      totalAmountBs: usdTransactions.reduce((sum, tx) => sum + Number(tx.amountBs), 0),
+      byType: {
+        dolares: usdTransactions.filter(tx => tx.transactionType === TransactionType.DOLARES).length,
+        paypal: usdTransactions.filter(tx => tx.transactionType === TransactionType.PAYPAL).length,
+        zelle: usdTransactions.filter(tx => tx.transactionType === TransactionType.ZELLE).length,
+      },
+    };
 
     let totalEarningsFromColombia = 0; // Ganancias 50/50 de Admin Colombia
     let totalEarningsFromOwnVendors = 0; // Ganancias 5% de sus vendedores
@@ -1659,12 +1917,14 @@ export class TransactionsService {
       // IMPORTANTE: Solo contar ganancias y deuda de transacciones de vendedores de Admin Colombia
       // Las transacciones de vendedores de Admin Venezuela NO generan deuda de Colombia
       const isAdminColombiaVendor = !tx.createdBy?.adminId || tx.createdBy?.adminId === 1;
-      
+
+
       if (isAdminColombiaVendor) {
-        // Transacción de Admin Colombia: cuenta para deuda y ganancias 50/50
+        // Transacción de Admin Colombia: cuenta para ganancias 50/50 y deuda total
         totalEarningsFromColombia += gananciaAdminVenezuela;
         totalDebtFromColombia += deudaColombiaConVenezuela;
       }
+
 
       // Si la transacción es de sus propios vendedores, agregar comisión (usar transactionCommission)
       if (tx.createdBy?.adminId === ADMIN_VENEZUELA_ID) {
@@ -1697,10 +1957,27 @@ export class TransactionsService {
         };
       });
 
-    // Obtener pagos de Colombia a Venezuela
-    let payments = [];
+    // Calcular total pagado basado en transacciones marcadas como isPaidToVenezuela
     let totalPaid = 0;
+    transactionsWithPurchaseRate.forEach((tx) => {
+      const isAdminColombiaVendor = !tx.createdBy?.adminId || tx.createdBy?.adminId === 1;
+      if (isAdminColombiaVendor && tx.isPaidToVenezuela) {
+        const cop = Number(tx.amountCOP) || 0;
+        const bs = Number(tx.amountBs) || 0;
+        const purchaseRate = Number(tx.purchaseRate) || 0;
+        if (purchaseRate) {
+          const bolivares = bs;
+          const inversion = bolivares * purchaseRate;
+          const gananciaSistema = cop - inversion;
+          const gananciaAdminVenezuela = gananciaSistema / 2;
+          const deudaColombiaConVenezuela = inversion + gananciaAdminVenezuela;
+          totalPaid += deudaColombiaConVenezuela;
+        }
+      }
+    });
 
+    // Obtener historial de pagos manual (solo para referencia histórica)
+    let payments = [];
     try {
       payments = await this.venezuelaPaymentsRepository.find({
         where: {
@@ -1709,7 +1986,6 @@ export class TransactionsService {
         relations: ['createdBy'],
         order: { paymentDate: 'DESC' },
       });
-      totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
     } catch (error) {
       // Si la tabla no existe aún o hay un error, continuar sin pagos
       console.warn('Error fetching venezuela payments:', error.message);
@@ -1791,6 +2067,7 @@ export class TransactionsService {
       payments: paymentsWithSignedUrls,
       dateRange: { from: dateFrom, to: dateTo },
       hasTransactionsWithoutPurchaseRate,
+      usdMetrics,
       transactionsWithoutPurchaseRateCount: transactionsWithoutPurchaseRate.length,
     };
   }
@@ -1888,6 +2165,10 @@ export class TransactionsService {
       order: { createdAt: 'DESC' },
     });
 
+    // Separar transacciones normales de las USD
+    const normalTransactions = transactions.filter(t => !t.transactionType || t.transactionType === TransactionType.NORMAL);
+    const usdTransactions = transactions.filter(t => t.transactionType && t.transactionType !== TransactionType.NORMAL);
+
     // Calcular estadísticas
     const totalTransactions = transactions.length;
 
@@ -1902,33 +2183,40 @@ export class TransactionsService {
       cancelado_administrador: transactions.filter(t => t.status === TransactionStatus.CANCELADO_ADMINISTRADOR).length,
     };
 
-    // Montos totales
-    const totalAmountCOP = transactions.reduce((sum, t) => sum + parseFloat(t.amountCOP.toString()), 0);
+    // Montos totales (SOLO transacciones normales para deuda/ganancia)
+    const totalAmountCOP = normalTransactions.reduce((sum, t) => sum + (t.amountCOP ? parseFloat(t.amountCOP.toString()) : 0), 0);
     const totalAmountBs = transactions.reduce((sum, t) => sum + parseFloat(t.amountBs.toString()), 0);
 
-    // Montos por estado
-    const completedTransactions = transactions.filter(t => t.status === TransactionStatus.COMPLETADO);
-    const completedAmountCOP = completedTransactions.reduce((sum, t) => sum + parseFloat(t.amountCOP.toString()), 0);
+    // Métricas de transacciones USD
+    const totalUSDTransactions = usdTransactions.length;
+    const totalAmountUSD = usdTransactions.reduce((sum, t) => sum + (t.amountUSD ? parseFloat(t.amountUSD.toString()) : 0), 0);
+    const totalUSDAmountBs = usdTransactions.reduce((sum, t) => sum + parseFloat(t.amountBs.toString()), 0);
+
+    // Montos por estado (SOLO transacciones normales)
+    const completedTransactions = normalTransactions.filter(t => t.status === TransactionStatus.COMPLETADO);
+    const completedAmountCOP = completedTransactions.reduce((sum, t) => sum + (t.amountCOP ? parseFloat(t.amountCOP.toString()) : 0), 0);
     const completedAmountBs = completedTransactions.reduce((sum, t) => sum + parseFloat(t.amountBs.toString()), 0);
 
-    const pendingTransactions = transactions.filter(t => t.status === TransactionStatus.PENDIENTE_VENEZUELA);
-    const pendingAmountCOP = pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amountCOP.toString()), 0);
+    const pendingTransactions = normalTransactions.filter(t => t.status === TransactionStatus.PENDIENTE_VENEZUELA);
+    const pendingAmountCOP = pendingTransactions.reduce((sum, t) => sum + (t.amountCOP ? parseFloat(t.amountCOP.toString()) : 0), 0);
     const pendingAmountBs = pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amountBs.toString()), 0);
 
-    const rejectedTransactions = transactions.filter(t => t.status === TransactionStatus.RECHAZADO);
-    const rejectedAmountCOP = rejectedTransactions.reduce((sum, t) => sum + parseFloat(t.amountCOP.toString()), 0);
+    const rejectedTransactions = normalTransactions.filter(t => t.status === TransactionStatus.RECHAZADO);
+    const rejectedAmountCOP = rejectedTransactions.reduce((sum, t) => sum + (t.amountCOP ? parseFloat(t.amountCOP.toString()) : 0), 0);
     const rejectedAmountBs = rejectedTransactions.reduce((sum, t) => sum + parseFloat(t.amountBs.toString()), 0);
 
-    // Ganancias del sistema (diferencia entre COP y Bs convertido)
+    // Ganancias del sistema (diferencia entre COP y Bs convertido) - SOLO transacciones normales
     const earnings = completedTransactions.map(t => {
+      if (!t.amountCOP) return 0;
       const copValue = parseFloat(t.amountCOP.toString());
       const bsValue = parseFloat(t.amountBs.toString());
       const rate = parseFloat(t.saleRate.toString());
       return copValue - (bsValue * rate);
     }).reduce((sum, earning) => sum + earning, 0);
 
-    // Ganancias del vendedor (usando transactionCommission específica)
+    // Ganancias del vendedor (usando transactionCommission específica) - SOLO transacciones normales
     const vendorEarningsTotal = completedTransactions.reduce((sum, t) => {
+      if (!t.amountCOP) return sum;
       const copValue = parseFloat(t.amountCOP.toString());
       // Usar la comisión específica de la transacción, fallback al commission del usuario
       const commissionPercentage = (t.transactionCommission || user.commission || 2) / 100;
@@ -1938,6 +2226,7 @@ export class TransactionsService {
     const vendorEarningsPaid = completedTransactions
       .filter(t => t.isCommissionPaidToVendor)
       .reduce((sum, t) => {
+        if (!t.amountCOP) return sum;
         const copValue = parseFloat(t.amountCOP.toString());
         // Usar la comisión específica de la transacción
         const commissionPercentage = (t.transactionCommission || user.commission || 2) / 100;
@@ -1946,20 +2235,22 @@ export class TransactionsService {
 
     const vendorEarningsPending = vendorEarningsTotal - vendorEarningsPaid;
 
-    // Detalle de comisiones por transacción
-    const commissionsDetail = completedTransactions.map(t => ({
-      id: t.id,
-      date: t.createdAt,
-      beneficiaryName: t.beneficiaryFullName,
-      amountCOP: parseFloat(t.amountCOP.toString()),
-      commissionRate: t.transactionCommission || user.commission || 2,
-      commissionAmount: parseFloat(t.amountCOP.toString()) * ((t.transactionCommission || user.commission || 2) / 100),
-      isPaid: t.isCommissionPaidToVendor,
-      hasCustomRate: t.hasCustomRate || false,
-    }));
+    // Detalle de comisiones por transacción (SOLO transacciones normales)
+    const commissionsDetail = completedTransactions
+      .filter(t => t.amountCOP)
+      .map(t => ({
+        id: t.id,
+        date: t.createdAt,
+        beneficiaryName: t.beneficiaryFullName,
+        amountCOP: parseFloat(t.amountCOP.toString()),
+        commissionRate: t.transactionCommission || user.commission || 2,
+        commissionAmount: parseFloat(t.amountCOP.toString()) * ((t.transactionCommission || user.commission || 2) / 100),
+        isPaid: t.isCommissionPaidToVendor,
+        hasCustomRate: t.hasCustomRate || false,
+      }));
 
-    // Transacciones por día (últimos 30 días o según el rango)
-    const transactionsByDay = this.groupTransactionsByDay(transactions);
+    // Transacciones por día (últimos 30 días o según el rango) - SOLO normales para evitar errores
+    const transactionsByDay = this.groupTransactionsByDay(normalTransactions);
 
     return {
       totalTransactions,
@@ -1976,11 +2267,17 @@ export class TransactionsService {
       vendorEarningsTotal,
       vendorEarningsPaid,
       vendorEarningsPending,
-      commissionsDetail, // Nuevo campo
+      commissionsDetail,
       transactionsByDay,
-      averageRate: totalTransactions > 0
-        ? transactions.reduce((sum, t) => sum + parseFloat(t.saleRate.toString()), 0) / totalTransactions
+      averageRate: normalTransactions.length > 0
+        ? normalTransactions.reduce((sum, t) => sum + (t.saleRate ? parseFloat(t.saleRate.toString()) : 0), 0) / normalTransactions.length
         : 0,
+      // Nuevas métricas USD
+      usdMetrics: {
+        totalUSDTransactions,
+        totalAmountUSD,
+        totalUSDAmountBs,
+      },
     };
   }
 
@@ -2008,7 +2305,7 @@ export class TransactionsService {
       }
 
       grouped[date].count++;
-      grouped[date].amountCOP += parseFloat(transaction.amountCOP.toString());
+      grouped[date].amountCOP += transaction.amountCOP ? parseFloat(transaction.amountCOP.toString()) : 0;
       grouped[date].amountBs += parseFloat(transaction.amountBs.toString());
 
       if (transaction.status === TransactionStatus.COMPLETADO) {
@@ -2036,9 +2333,9 @@ export class TransactionsService {
       .leftJoinAndSelect('transaction.clientApp', 'clientApp')
       .leftJoinAndSelect('transaction.beneficiary', 'beneficiary')
       .where('transaction.status = :status', { status: TransactionStatus.PENDIENTE_VENEZUELA })
-      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', { 
-        adminId: ADMIN_COLOMBIA_ID, 
-        role: UserRole.VENDEDOR 
+      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
       })
       .orderBy('transaction.createdAt', 'ASC')
       .getMany();
@@ -2056,7 +2353,7 @@ export class TransactionsService {
             console.error(`Error generating signed URL for vendorPaymentProof of transaction ${tx.id}:`, error);
           }
         }
-        
+
         // Generar URL firmada para comprobante de Venezuela
         if (tx.comprobanteVenezuela) {
           try {
@@ -2067,7 +2364,7 @@ export class TransactionsService {
             console.error(`Error generating signed URL for comprobanteVenezuela of transaction ${tx.id}:`, error);
           }
         }
-        
+
         return tx;
       })
     );
@@ -2089,10 +2386,14 @@ export class TransactionsService {
       .leftJoinAndSelect('transaction.clientApp', 'clientApp');
 
     // Filter by Admin Colombia's vendors only
-    queryBuilder.andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', { 
-      adminId: ADMIN_COLOMBIA_ID, 
-      role: UserRole.VENDEDOR 
+    queryBuilder.andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', {
+      adminId: ADMIN_COLOMBIA_ID,
+      role: UserRole.VENDEDOR
     });
+
+    // Filter only normal transactions (exclude USD transactions: paypal, zelle, dolares)
+    queryBuilder.andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL });
+    queryBuilder.andWhere('transaction.amountCOP IS NOT NULL'); // USD transactions have null amountCOP
 
     // Filter by vendor if provided and valid
     if (vendorId !== undefined && vendorId !== null && vendorId !== '') {
@@ -2186,14 +2487,15 @@ export class TransactionsService {
       dateFrom.setHours(0, 0, 0, 0);
     }
 
-    // Build query
+    // Build query (SOLO transacciones normales para estadísticas principales)
     const queryBuilder = this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
       .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
-      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', { 
-        adminId: ADMIN_COLOMBIA_ID, 
-        role: UserRole.VENDEDOR 
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
+      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
       });
 
     // Filter by vendor if provided
@@ -2203,7 +2505,24 @@ export class TransactionsService {
 
     const transactions = await queryBuilder.getMany();
 
-    // Calculate stats
+    // Obtener transacciones USD para sección separada
+    const usdQueryBuilder = this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'createdBy')
+      .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
+      .andWhere('transaction.transactionType IN (:...usdTypes)', { usdTypes: [TransactionType.PAYPAL, TransactionType.ZELLE, TransactionType.DOLARES] })
+      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
+      });
+
+    if (vendorId) {
+      usdQueryBuilder.andWhere('transaction.createdBy.id = :vendorId', { vendorId: +vendorId });
+    }
+
+    const usdTransactions = await usdQueryBuilder.getMany();
+
+    // Calculate stats (SOLO transacciones normales)
     const totalTransactions = transactions.length;
     const completedTransactions = transactions.filter(t => t.status === TransactionStatus.COMPLETADO);
     const rejectedTransactions = transactions.filter(t => t.status === TransactionStatus.RECHAZADO);
@@ -2216,7 +2535,7 @@ export class TransactionsService {
       t.status === TransactionStatus.PENDIENTE_VENEZUELA
     );
 
-    const totalCOP = completedTransactions.reduce((sum, t) => sum + Number(t.amountCOP), 0);
+    const totalCOP = completedTransactions.reduce((sum, t) => sum + (Number(t.amountCOP) || 0), 0);
     const totalBs = completedTransactions.reduce((sum, t) => sum + Number(t.amountBs), 0);
 
     // Group by day for chart data (usando fecha local, no UTC)
@@ -2263,7 +2582,7 @@ export class TransactionsService {
       vendorStats[vendorId].totalTransactions++;
       if (t.status === TransactionStatus.COMPLETADO) {
         vendorStats[vendorId].completedCount++;
-        vendorStats[vendorId].totalCOP += Number(t.amountCOP);
+        vendorStats[vendorId].totalCOP += Number(t.amountCOP) || 0;
         vendorStats[vendorId].totalBs += Number(t.amountBs);
       } else if (t.status === TransactionStatus.RECHAZADO) {
         vendorStats[vendorId].rejectedCount++;
@@ -2276,6 +2595,20 @@ export class TransactionsService {
       }
     });
 
+    // Calcular métricas USD
+    const usdCompleted = usdTransactions.filter(t => t.status === TransactionStatus.COMPLETADO);
+    const usdMetrics = {
+      totalTransactions: usdTransactions.length,
+      completedCount: usdCompleted.length,
+      totalAmountUSD: usdCompleted.reduce((sum, t) => sum + (Number(t.amountUSD) || 0), 0),
+      totalAmountBs: usdCompleted.reduce((sum, t) => sum + Number(t.amountBs), 0),
+      byType: {
+        dolares: usdCompleted.filter(tx => tx.transactionType === TransactionType.DOLARES).length,
+        paypal: usdCompleted.filter(tx => tx.transactionType === TransactionType.PAYPAL).length,
+        zelle: usdCompleted.filter(tx => tx.transactionType === TransactionType.ZELLE).length,
+      },
+    };
+
     return {
       summary: {
         totalTransactions,
@@ -2286,11 +2619,12 @@ export class TransactionsService {
         totalCOP,
         totalBs,
         averageRate: completedTransactions.length > 0
-          ? completedTransactions.reduce((sum, t) => sum + Number(t.saleRate), 0) / completedTransactions.length
+          ? completedTransactions.reduce((sum, t) => sum + (Number(t.saleRate) || 0), 0) / completedTransactions.length
           : 0,
       },
       chartData,
       vendorStats: Object.values(vendorStats),
+      usdMetrics,
       dateRange: { from: dateFrom, to: dateTo },
     };
   }
@@ -2324,9 +2658,9 @@ export class TransactionsService {
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
       .where('transaction.createdAt BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo })
       .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
-      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', { 
-        adminId: ADMIN_COLOMBIA_ID, 
-        role: UserRole.VENDEDOR 
+      .andWhere('(createdBy.adminId = :adminId OR (createdBy.role = :role AND createdBy.adminId IS NULL))', {
+        adminId: ADMIN_COLOMBIA_ID,
+        role: UserRole.VENDEDOR
       });
 
     // Filter by vendor if provided
@@ -2692,22 +3026,44 @@ export class TransactionsService {
     }
 
     // Obtener transacciones completadas con tasa de compra establecida de vendedores de este Admin Colombia
+    // Solo las que NO están pagadas a Venezuela y que sean transacciones NORMALES (no PayPal, Zelle, Dólares)
     const transactionsWithRate = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.createdBy', 'createdBy')
       .leftJoinAndSelect('transaction.beneficiary', 'beneficiary')
       .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPurchaseRateSet = :isPurchaseRateSet', { isPurchaseRateSet: true })
+      .andWhere('(transaction.isPaidToVenezuela IS NULL OR transaction.isPaidToVenezuela = :isPaid)', { isPaid: false })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
+      .andWhere('transaction.amountCOP IS NOT NULL')
       .andWhere('createdBy.adminId = :adminId', { adminId: user.id })
       .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
       .andWhere('transaction.createdAt <= :dateTo', { dateTo })
       .orderBy('transaction.createdAt', 'ASC')
       .getMany();
 
-    let totalDebt = 0;
+    // Obtener también todas las transacciones normales (incluyendo pagadas) para mostrar en el detalle
+    const allTransactionsWithRate = await this.transactionsRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.createdBy', 'createdBy')
+      .leftJoinAndSelect('transaction.beneficiary', 'beneficiary')
+      .where('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
+      .andWhere('transaction.isPurchaseRateSet = :isPurchaseRateSet', { isPurchaseRateSet: true })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
+      .andWhere('transaction.amountCOP IS NOT NULL')
+      .andWhere('createdBy.adminId = :adminId', { adminId: user.id })
+      .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
+      .andWhere('transaction.createdAt <= :dateTo', { dateTo })
+      .orderBy('transaction.createdAt', 'ASC')
+      .getMany();
+
+    // Calcular totales basados en TODAS las transacciones (pagadas y no pagadas)
+    let totalDebt = 0;  // Suma de TODAS las transacciones en el período
+    let pendingDebt = 0; // Suma solo de las NO pagadas
     const transactionDetails: TransactionDebtDetail[] = [];
 
-    transactionsWithRate.forEach((tx) => {
+    // Procesar TODAS las transacciones (allTransactionsWithRate incluye pagadas y no pagadas)
+    allTransactionsWithRate.forEach((tx) => {
       const cop = Number(tx.amountCOP) || 0;
       const bs = Number(tx.amountBs) || 0;
       const saleRate = Number(tx.saleRate) || 0;
@@ -2725,7 +3081,13 @@ export class TransactionsService {
       const gananciaAdminVenezuela = gananciaSistema / 2;
       const deudaConVenezuela = inversion + gananciaAdminVenezuela;
 
+      // Sumar a deuda total (todas las transacciones)
       totalDebt += deudaConVenezuela;
+
+      // Si NO está pagada, sumar a deuda pendiente
+      if (!tx.isPaidToVenezuela) {
+        pendingDebt += deudaConVenezuela;
+      }
 
       transactionDetails.push({
         id: tx.id,
@@ -2741,10 +3103,15 @@ export class TransactionsService {
         gananciaAdminColombia,
         gananciaAdminVenezuela,
         deudaConVenezuela,
+        isPaidToVenezuela: tx.isPaidToVenezuela || false,
+        paidToVenezuelaAt: tx.paidToVenezuelaAt || null,
       });
     });
 
-    // Obtener pagos realizados en el período (filtrar por paymentDate, no por createdAt)
+    // Calcular total pagado (totalDebt - pendingDebt)
+    const totalPaid = totalDebt - pendingDebt;
+
+    // Obtener pagos históricos (para mostrar en el historial, pero ya no se usan para calcular deuda)
     const payments = await this.venezuelaPaymentsRepository.find({
       where: {
         paymentDate: Between(dateFrom, dateTo),
@@ -2752,8 +3119,6 @@ export class TransactionsService {
       relations: ['createdBy'],
       order: { paymentDate: 'DESC' },
     });
-
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
 
     const paymentDetails: VenezuelaPaymentDetail[] = await Promise.all(
       payments.map(async (p) => {
@@ -2786,7 +3151,7 @@ export class TransactionsService {
     return {
       totalDebt,
       totalPaid,
-      pendingDebt: totalDebt - totalPaid,
+      pendingDebt,
       transactionDetails,
       payments: paymentDetails,
     };
@@ -2851,6 +3216,104 @@ export class TransactionsService {
   }
 
   /**
+   * Marca transacciones como pagadas a Venezuela
+   */
+  async markTransactionsAsPaidToVenezuela(transactionIds: number[], user: User): Promise<{ message: string; updated: number }> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA) {
+      throw new ForbiddenException('Solo Admin Colombia puede marcar transacciones como pagadas');
+    }
+
+    if (!transactionIds || transactionIds.length === 0) {
+      throw new BadRequestException('Debe proporcionar al menos una transacción');
+    }
+
+    // Verificar que todas las transacciones pertenezcan a vendedores de este Admin Colombia
+    const transactions = await this.transactionsRepository.find({
+      where: transactionIds.map(id => ({ id })),
+      relations: ['createdBy'],
+    });
+
+    const invalidTransactions = transactions.filter(
+      tx => !tx.createdBy?.adminId || tx.createdBy.adminId !== user.id
+    );
+
+    if (invalidTransactions.length > 0) {
+      throw new ForbiddenException('No tienes permisos para marcar estas transacciones');
+    }
+
+    // Verificar que todas las transacciones estén completadas y tengan tasa de compra
+    const invalidStatus = transactions.filter(
+      tx => tx.status !== TransactionStatus.COMPLETADO || !tx.isPurchaseRateSet
+    );
+
+    if (invalidStatus.length > 0) {
+      throw new BadRequestException('Solo se pueden marcar transacciones completadas con tasa de compra establecida');
+    }
+
+    // Marcar como pagadas
+    const now = new Date();
+    await this.transactionsRepository.update(
+      { id: In(transactionIds) },
+      {
+        isPaidToVenezuela: true,
+        paidToVenezuelaAt: now,
+      }
+    );
+
+    this.logger.log(`Transacciones marcadas como pagadas a Venezuela: ${transactionIds.join(', ')} por usuario ${user.id}`);
+
+    return {
+      message: `${transactionIds.length} transacción(es) marcada(s) como pagada(s)`,
+      updated: transactionIds.length,
+    };
+  }
+
+  /**
+   * Desmarca transacciones como pagadas a Venezuela
+   */
+  async markTransactionsAsUnpaidToVenezuela(transactionIds: number[], user: User): Promise<{ message: string; updated: number }> {
+    // Verificar permisos
+    if (user.role !== UserRole.ADMIN_COLOMBIA) {
+      throw new ForbiddenException('Solo Admin Colombia puede desmarcar transacciones como pagadas');
+    }
+
+    if (!transactionIds || transactionIds.length === 0) {
+      throw new BadRequestException('Debe proporcionar al menos una transacción');
+    }
+
+    // Verificar que todas las transacciones pertenezcan a vendedores de este Admin Colombia
+    const transactions = await this.transactionsRepository.find({
+      where: transactionIds.map(id => ({ id })),
+      relations: ['createdBy'],
+    });
+
+    const invalidTransactions = transactions.filter(
+      tx => !tx.createdBy?.adminId || tx.createdBy.adminId !== user.id
+    );
+
+    if (invalidTransactions.length > 0) {
+      throw new ForbiddenException('No tienes permisos para desmarcar estas transacciones');
+    }
+
+    // Desmarcar como pagadas
+    await this.transactionsRepository.update(
+      { id: In(transactionIds) },
+      {
+        isPaidToVenezuela: false,
+        paidToVenezuelaAt: null,
+      }
+    );
+
+    this.logger.log(`Transacciones desmarcadas como pagadas a Venezuela: ${transactionIds.join(', ')} por usuario ${user.id}`);
+
+    return {
+      message: `${transactionIds.length} transacción(es) desmarcada(s) como pagada(s)`,
+      updated: transactionIds.length,
+    };
+  }
+
+  /**
    * Obtiene el historial de transacciones de Admin Venezuela (de sus vendedores)
    * Solo muestra transacciones completadas, rechazadas o canceladas
    */
@@ -2868,9 +3331,13 @@ export class TransactionsService {
       .leftJoinAndSelect('transaction.clientApp', 'clientApp');
 
     // Filter by Admin Venezuela's vendors only (igual que Admin Colombia pero con ID 2)
-    queryBuilder.andWhere('createdBy.adminId = :adminId', { 
+    queryBuilder.andWhere('createdBy.adminId = :adminId', {
       adminId: ADMIN_VENEZUELA_ID
     });
+
+    // Filter only normal transactions (exclude USD transactions: paypal, zelle, dolares)
+    queryBuilder.andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL });
+    queryBuilder.andWhere('transaction.amountCOP IS NOT NULL'); // USD transactions have null amountCOP
 
     // Filter by vendor if provided and valid
     if (vendorId !== undefined && vendorId !== null && vendorId !== '') {

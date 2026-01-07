@@ -1,5 +1,5 @@
 import api from './api';
-import { ExchangeRate } from '@/types/rate';
+import { ExchangeRate, RateType } from '@/types/rate';
 
 export const ratesService = {
     async getCurrentRate(): Promise<ExchangeRate> {
@@ -7,16 +7,20 @@ export const ratesService = {
         return response.data;
     },
 
-    async getRateHistory(limit: number = 10): Promise<ExchangeRate[]> {
+    async getAllCurrentRates(): Promise<Record<RateType, ExchangeRate | null>> {
+        const response = await api.get<Record<RateType, ExchangeRate | null>>('/rates/all-current');
+        return response.data;
+    },
+
+    async getRateHistory(limit: number = 30): Promise<ExchangeRate[]> {
         const response = await api.get<ExchangeRate[]>('/rates/history', {
             params: { limit },
         });
         return response.data;
     },
 
-    async updateRate(saleRate: number): Promise<ExchangeRate> {
-        // el backend ahora espera saleRate como nombre de campo
-        const response = await api.post<ExchangeRate>('/rates', { saleRate });
+    async updateRate(rateType: RateType, saleRate: number): Promise<ExchangeRate> {
+        const response = await api.post<ExchangeRate>('/rates', { rateType, saleRate });
         return response.data;
     },
 };

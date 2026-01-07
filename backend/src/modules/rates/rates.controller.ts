@@ -33,9 +33,15 @@ export class RatesController {
     return this.ratesService.getCurrentRate();
   }
 
+  @Get('all-current')
+  @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA, UserRole.VENDEDOR)
+  getAllCurrentRates() {
+    return this.ratesService.getAllCurrentRates();
+  }
+
   @Get('history')
   @Roles(UserRole.ADMIN_COLOMBIA, UserRole.ADMIN_VENEZUELA)
-  getHistory(@Query('limit') limit: number = 10) {
+  getHistory(@Query('limit') limit: number = 30) {
     return this.ratesService.getHistory(limit);
   }
 

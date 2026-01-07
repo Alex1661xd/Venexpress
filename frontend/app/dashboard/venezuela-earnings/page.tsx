@@ -18,6 +18,7 @@ export default function VenezuelaEarningsPage() {
   const [endDate, setEndDate] = useState(() => getLocalDateString());
   const [showToday, setShowToday] = useState(true);
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  const [showVendorBreakdown, setShowVendorBreakdown] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -276,8 +277,11 @@ export default function VenezuelaEarningsPage() {
               <p className="text-xs opacity-75 mt-2">Proviene del cálculo: (COP - Inversión) ÷ 2</p>
             </div>
 
-            {/* Ganancias de sus Vendedores (5%) */}
-            <div className="bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl shadow-lg p-6 text-white">
+            {/* Ganancias de sus Vendedores (5%) - Clickeable */}
+            <div 
+              className="bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl shadow-lg p-6 text-white cursor-pointer hover:from-violet-600 hover:to-violet-700 transition-all transform hover:scale-105"
+              onClick={() => setShowVendorBreakdown(true)}
+            >
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium opacity-90">Ganancias de Vendedores Propios</h3>
                 <svg className="w-8 h-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,6 +293,12 @@ export default function VenezuelaEarningsPage() {
               </p>
               <p className="text-xs opacity-75 mt-1">5% de comisión por vendedor (COP)</p>
               <p className="text-xs opacity-75 mt-2">Proviene de: Monto COP × 0.05</p>
+              <div className="flex items-center gap-1 mt-3 text-xs font-medium opacity-90">
+                <span>Ver desglose por vendedor</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
             </div>
           </div>
 
@@ -586,8 +596,202 @@ export default function VenezuelaEarningsPage() {
               </div>
             </div>
           )}
+
+          {/* USD Transactions Section */}
+          {summary?.usdMetrics && summary.usdMetrics.totalTransactions > 0 && (
+            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-purple-200 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-lg font-bold text-gray-900">Transacciones en Dólares (USD)</h3>
+                <span className="text-xs text-gray-500 italic">(No incluidas en ganancias/deuda)</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <p className="text-sm text-purple-700 font-medium mb-1">Total Transacciones USD</p>
+                  <p className="text-2xl font-bold text-purple-900">{summary.usdMetrics.totalTransactions}</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <p className="text-sm text-green-700 font-medium mb-1">Total Dólares Movidos</p>
+                  <p className="text-2xl font-bold text-green-900">
+                    ${summary.usdMetrics.totalAmountUSD.toLocaleString('es-CO', { maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-sm text-blue-700 font-medium mb-1">Total Bolívares (USD)</p>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {summary.usdMetrics.totalAmountBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} Bs
+                  </p>
+                </div>
+              </div>
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">Desglose por Tipo:</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-3 bg-green-100 rounded-lg">
+                    <p className="text-xs text-green-700 font-medium">Dólares</p>
+                    <p className="text-lg font-bold text-green-900">{summary.usdMetrics.byType.dolares}</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-100 rounded-lg">
+                    <p className="text-xs text-purple-700 font-medium">PayPal</p>
+                    <p className="text-lg font-bold text-purple-900">{summary.usdMetrics.byType.paypal}</p>
+                  </div>
+                  <div className="text-center p-3 bg-indigo-100 rounded-lg">
+                    <p className="text-xs text-indigo-700 font-medium">Zelle</p>
+                    <p className="text-lg font-bold text-indigo-900">{summary.usdMetrics.byType.zelle}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
+
+      {/* Modal de Desglose por Vendedor */}
+      {showVendorBreakdown && summary?.ownVendorsCommissionsDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 text-white p-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">Desglose de Comisiones por Vendedor</h2>
+                <p className="text-violet-100 text-sm mt-1">
+                  Comisiones de vendedores propios de Admin Venezuela
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVendorBreakdown(false)}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Resumen por vendedor */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen por Vendedor</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {Object.values(
+                    summary.ownVendorsCommissionsDetail.reduce((acc: any, detail: any) => {
+                      const vendorName = detail.vendorName;
+                      if (!acc[vendorName]) {
+                        acc[vendorName] = {
+                          vendorName,
+                          totalCommission: 0,
+                          transactionCount: 0,
+                        };
+                      }
+                      acc[vendorName].totalCommission += detail.commissionAmount;
+                      acc[vendorName].transactionCount += 1;
+                      return acc;
+                    }, {})
+                  ).map((vendor: any) => (
+                    <div key={vendor.vendorName} className="bg-violet-50 p-4 rounded-lg border border-violet-200">
+                      <p className="text-sm font-medium text-violet-900">{vendor.vendorName}</p>
+                      <p className="text-2xl font-bold text-violet-700 mt-1">
+                        ${vendor.totalCommission.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                      </p>
+                      <p className="text-xs text-violet-600 mt-1">
+                        {vendor.transactionCount} transacción{vendor.transactionCount !== 1 ? 'es' : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tabla detallada */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalle de Transacciones</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-gray-100 border-b-2 border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendedor</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beneficiario</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto COP</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">% Comisión</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Comisión</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Pagado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {summary.ownVendorsCommissionsDetail
+                        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .map((detail: any) => (
+                          <tr key={detail.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">#{detail.id}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(detail.createdAt).toLocaleDateString('es-CO', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{detail.vendorName}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{detail.beneficiaryFullName}</td>
+                            <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                              ${detail.amountCOP.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-block px-2 py-1 text-xs font-bold rounded ${
+                                detail.hasCustomRate 
+                                  ? 'bg-amber-100 text-amber-800' 
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {detail.commissionRate}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-violet-700">
+                              ${detail.commissionAmount.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {detail.isPaid ? (
+                                <span className="inline-block px-2 py-1 text-xs font-bold bg-green-100 text-green-800 rounded">
+                                  ✓ Pagado
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-1 text-xs font-bold bg-amber-100 text-amber-800 rounded">
+                                  Pendiente
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                    <tfoot className="bg-gray-100 border-t-2 border-gray-200">
+                      <tr>
+                        <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                          Total Comisiones:
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-violet-700">
+                          ${summary.ownVendorsCommissionsDetail
+                            .reduce((sum: number, d: any) => sum + d.commissionAmount, 0)
+                            .toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex justify-end border-t">
+              <button
+                onClick={() => setShowVendorBreakdown(false)}
+                className="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <EarningsPasswordModal
         isOpen={earningsPassword.showModal}
         onClose={earningsPassword.closeAuthModal}

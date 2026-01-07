@@ -29,6 +29,11 @@ interface VendorReports {
     vendorEarningsPaid: number;
     vendorEarningsPending: number;
     averageRate: number;
+    usdMetrics?: {
+        totalUSDTransactions: number;
+        totalAmountUSD: number;
+        totalUSDAmountBs: number;
+    };
     commissionsDetail?: Array<{
         id: number;
         date: string;
@@ -305,7 +310,7 @@ export default function VendorReportsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl shadow-sm border border-emerald-200 p-5">
                     <h4 className="text-sm font-semibold text-emerald-800 mb-1">Ganancia Total Vendedor</h4>
-                    <p className="text-xs text-emerald-700 mb-3">{user?.commission || 2}% de las transacciones COMPLETADAS</p>
+                    <p className="text-xs text-emerald-700 mb-3">{user?.commission || 2}% de transacciones COP COMPLETADAS</p>
                     <p className="text-2xl font-bold text-emerald-900">
                         ${reports.vendorEarningsTotal.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
@@ -327,6 +332,66 @@ export default function VendorReportsPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Métricas de Transacciones USD */}
+            {reports.usdMetrics && (reports.usdMetrics.totalUSDTransactions > 0 || reports.usdMetrics.totalAmountUSD > 0) && (
+                <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl shadow-sm border-2 border-purple-200 p-6">
+                    <div className="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-purple-900 flex items-center gap-2">
+                                💵 Transacciones en Dólares (USD)
+                            </h3>
+                            <p className="text-sm text-purple-700 mt-1">
+                                PayPal • Zelle • Dólares
+                            </p>
+                        </div>
+                        <div className="px-3 py-1 bg-purple-600 text-white text-xs font-bold rounded-full">
+                            INFO
+                        </div>
+                    </div>
+
+                    <div className="bg-white/60 rounded-lg p-4 mb-4 border border-purple-200">
+                        <p className="text-sm text-purple-900 font-medium mb-2">
+                            ℹ️ Importante: Las transacciones en USD no afectan tu deuda ni tus comisiones
+                        </p>
+                        <p className="text-xs text-purple-700">
+                            Estas transacciones se procesan de manera independiente y no requieren pago posterior por tu parte.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <p className="text-sm font-medium text-purple-700 mb-1">Transacciones USD</p>
+                            <p className="text-2xl font-bold text-purple-900">
+                                {reports.usdMetrics.totalUSDTransactions}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-1">
+                                PayPal, Zelle, Dólares
+                            </p>
+                        </div>
+
+                        <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <p className="text-sm font-medium text-purple-700 mb-1">Total Dólares Movidos</p>
+                            <p className="text-2xl font-bold text-purple-900">
+                                ${reports.usdMetrics.totalAmountUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-1">
+                                USD procesados
+                            </p>
+                        </div>
+
+                        <div className="bg-white rounded-lg p-4 border border-purple-200">
+                            <p className="text-sm font-medium text-purple-700 mb-1">Equivalente en Bs</p>
+                            <p className="text-2xl font-bold text-purple-900">
+                                {reports.usdMetrics.totalUSDAmountBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-1">
+                                Bolívares enviados
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Detalle de Comisiones por Transacción */}
             {reports.commissionsDetail && reports.commissionsDetail.length > 0 && (

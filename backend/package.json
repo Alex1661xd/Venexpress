@@ -23,7 +23,8 @@
     "migration:run": "npm run typeorm -- migration:run -d ormconfig.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d ormconfig.ts",
     "seed": "ts-node -r tsconfig-paths/register src/shared/typeorm/seeds/seed.ts",
-    "script:delete-vendor": "ts-node -r tsconfig-paths/register scripts/delete-vendor.ts"
+    "script:delete-vendor": "ts-node -r tsconfig-paths/register scripts/delete-vendor.ts",
+    "script:delete-transactions": "ts-node -r tsconfig-paths/register scripts/delete-transactions.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

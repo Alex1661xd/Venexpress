@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, ValidateIf, IsEnum } from 'class-validator';
+import { TransactionType } from '../../../common/enums/transaction-type.enum';
 
 export class CreateTransactionDto {
   @IsNotEmpty()
@@ -9,12 +10,21 @@ export class CreateTransactionDto {
   @IsNumber()
   clientPresencialId?: number;
 
-  @ValidateIf((o) => !o.amountBs)
-  @IsNotEmpty()
+  @IsOptional()
+  @IsEnum(TransactionType)
+  transactionType?: TransactionType;
+
+  @ValidateIf((o) => o.transactionType === TransactionType.NORMAL || !o.transactionType)
+  @ValidateIf((o) => !o.amountBs && !o.amountUSD)
   @IsNumber()
   amountCOP?: number;
 
-  @ValidateIf((o) => !o.amountCOP)
+  @ValidateIf((o) => o.transactionType && o.transactionType !== TransactionType.NORMAL)
+  @ValidateIf((o) => !o.amountBs && !o.amountCOP)
+  @IsNumber()
+  amountUSD?: number;
+
+  @ValidateIf((o) => !o.amountCOP && !o.amountUSD)
   @IsNotEmpty()
   @IsNumber()
   amountBs?: number;

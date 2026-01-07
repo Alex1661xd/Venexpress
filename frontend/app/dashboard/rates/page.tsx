@@ -8,17 +8,62 @@ import Input from '@/components/ui/Input';
 import Alert from '@/components/ui/Alert';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { ratesService } from '@/services/rates.service';
-import { ExchangeRate } from '@/types/rate';
+import { ExchangeRate, RateType } from '@/types/rate';
+
+const RATE_CONFIGS: Record<RateType, { name: string; icon: string; color: string; bgColor: string; description: string }> = {
+    [RateType.ACTUAL]: {
+        name: 'Tasa Actual',
+        icon: '💱',
+        color: 'from-green-600 to-emerald-600',
+        bgColor: 'bg-green-50 border-green-200',
+        description: 'Tasa de cambio general COP/Bs'
+    },
+    [RateType.PAYPAL]: {
+        name: 'Tasa PayPal',
+        icon: '💳',
+        color: 'from-blue-600 to-cyan-600',
+        bgColor: 'bg-blue-50 border-blue-200',
+        description: 'Tasa para transacciones PayPal'
+    },
+    [RateType.ZELLE]: {
+        name: 'Tasa Zelle',
+        icon: '⚡',
+        color: 'from-purple-600 to-pink-600',
+        bgColor: 'bg-purple-50 border-purple-200',
+        description: 'Tasa para transferencias Zelle'
+    },
+    [RateType.DOLARES]: {
+        name: 'Tasa Dólares',
+        icon: '💵',
+        color: 'from-yellow-600 to-orange-600',
+        bgColor: 'bg-yellow-50 border-yellow-200',
+        description: 'Tasa para dólares en efectivo'
+    },
+    [RateType.BANCO_CENTRAL]: {
+        name: 'Valor Dólar Banco Central',
+        icon: '🏦',
+        color: 'from-gray-700 to-slate-800',
+        bgColor: 'bg-gray-50 border-gray-200',
+        description: 'Tasa oficial del Banco Central'
+    },
+};
 
 export default function RatesPage() {
     const { user } = useAuth();
-    const [currentRate, setCurrentRate] = useState<ExchangeRate | null>(null);
+    const [currentRates, setCurrentRates] = useState<Record<RateType, ExchangeRate | null>>({
+        [RateType.ACTUAL]: null,
+        [RateType.PAYPAL]: null,
+        [RateType.ZELLE]: null,
+        [RateType.DOLARES]: null,
+        [RateType.BANCO_CENTRAL]: null,
+    });
     const [rateHistory, setRateHistory] = useState<ExchangeRate[]>([]);
     const [loading, setLoading] = useState(true);
-    const [newRate, setNewRate] = useState('');
+    const [editingRate, setEditingRate] = useState<RateType | null>(null);
+    const [newRateValue, setNewRateValue] = useState('');
     const [saving, setSaving] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 3;
+    const itemsPerPage = 5;
     const [alertState, setAlertState] = useState<{ isOpen: boolean; message: string; variant?: 'error' | 'success' | 'warning' | 'info' }>({
         isOpen: false,
         message: '',
@@ -36,16 +81,13 @@ export default function RatesPage() {
 
     const loadData = async () => {
         try {
-            const [current, history] = await Promise.all([
-                ratesService.getCurrentRate(),
+            const [allRates, history] = await Promise.all([
+                ratesService.getAllCurrentRates(),
                 ratesService.getRateHistory(),
             ]);
-            setCurrentRate(current);
+            setCurrentRates(allRates);
             setRateHistory(history);
-            setCurrentPage(1); // Reset to first page when loading new data
-            if (current && current.saleRate !== undefined && current.saleRate !== null) {
-                setNewRate(current.saleRate.toString());
-            }
+            setCurrentPage(1);
         } catch (error) {
             console.error('Error loading rates:', error);
         } finally {
@@ -53,8 +95,21 @@ export default function RatesPage() {
         }
     };
 
+    const handleEditRate = (rateType: RateType) => {
+        setEditingRate(rateType);
+        const currentValue = currentRates[rateType]?.saleRate;
+        setNewRateValue(currentValue ? currentValue.toString() : '');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingRate(null);
+        setNewRateValue('');
+    };
+
     const handleUpdateRate = () => {
-        if (!newRate || parseFloat(newRate) <= 0) {
+        if (!editingRate) return;
+
+        if (!newRateValue || parseFloat(newRateValue) <= 0) {
             setAlertState({
                 isOpen: true,
                 message: 'Por favor ingresa una tasa válida',
@@ -63,19 +118,23 @@ export default function RatesPage() {
             return;
         }
 
+        const rateName = RATE_CONFIGS[editingRate].name;
+
         setConfirmState({
             isOpen: true,
-            message: `¿Estás seguro de actualizar la tasa a ${parseFloat(newRate).toFixed(2)}? Esta tasa se aplicará a todas las nuevas transacciones.`,
+            message: `¿Estás seguro de actualizar ${rateName} a ${parseFloat(newRateValue).toFixed(2)}?`,
             onConfirm: async () => {
                 setSaving(true);
                 try {
-                    await ratesService.updateRate(parseFloat(newRate));
+                    await ratesService.updateRate(editingRate!, parseFloat(newRateValue));
                     setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
                     setAlertState({
                         isOpen: true,
-                        message: 'Tasa actualizada exitosamente',
+                        message: `${rateName} actualizada exitosamente`,
                         variant: 'success'
                     });
+                    setEditingRate(null);
+                    setNewRateValue('');
                     await loadData();
                 } catch (error: any) {
                     setConfirmState({ isOpen: false, message: '', onConfirm: () => { } });
@@ -89,6 +148,10 @@ export default function RatesPage() {
                 }
             }
         });
+    };
+
+    const getRateDisplayName = (rateType: RateType): string => {
+        return RATE_CONFIGS[rateType]?.name || rateType;
     };
 
     if (user?.role !== 'admin_venezuela' && user?.role !== 'admin_colombia') {
@@ -106,72 +169,84 @@ export default function RatesPage() {
         <div className="p-4 sm:p-8 space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Tasa de Cambio</h1>
-                <p className="text-gray-600">Gestiona la tasa de cambio actual del sistema COP/Bs.</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">Tasas de Cambio</h1>
+                <p className="text-gray-600">Gestiona las diferentes tasas de cambio del sistema</p>
             </div>
 
-            {/* Current Rate Card */}
-            <Card className="bg-gradient-to-br from-green-600 to-emerald-600 text-white">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-green-100 text-sm font-medium mb-2">Tasa Actual</p>
-                        <h2 className="text-5xl font-bold">
-                            {loading ? '...' : (currentRate ? parseFloat(currentRate.saleRate.toString()).toFixed(2) : '0.00')}
-                        </h2>
-                        <p className="text-green-100 text-sm mt-2">Bs por cada COP</p>
-                        {currentRate && (
-                            <p className="text-green-200 text-xs mt-1">
-                                Última actualización: {new Date(currentRate.createdAt).toLocaleString('es-CO')}
-                            </p>
-                        )}
-                    </div>
-                    <div className="bg-white/20 backdrop-blur-sm rounded-full p-6">
-                        <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                        </svg>
-                    </div>
-                </div>
-            </Card>
+            {/* Current Rates Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {Object.entries(RATE_CONFIGS).map(([rateType, config]) => {
+                    const rate = currentRates[rateType as RateType];
+                    const isEditing = editingRate === rateType;
+                    
+                    return (
+                        <Card key={rateType} className={`bg-gradient-to-br ${config.color} text-white hover:shadow-lg transition-all`}>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-3xl">{config.icon}</span>
+                                    {user?.role === 'admin_venezuela' && !isEditing && (
+                                        <button
+                                            onClick={() => handleEditRate(rateType as RateType)}
+                                            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                                            title="Editar tasa"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                <div>
+                                    <p className="text-white/80 text-xs font-medium mb-1">{config.name}</p>
+                                    {isEditing ? (
+                                        <div className="space-y-2">
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="0.00"
+                                                value={newRateValue}
+                                                onChange={(e) => setNewRateValue(e.target.value)}
+                                                className="w-full px-2 py-1 text-gray-900 rounded text-lg font-bold"
+                                                autoFocus
+                                            />
+                                            <div className="flex gap-1">
+                                                <button
+                                                    onClick={handleUpdateRate}
+                                                    disabled={saving}
+                                                    className="flex-1 px-2 py-1 bg-white text-gray-900 rounded text-xs font-medium hover:bg-white/90 disabled:opacity-50"
+                                                >
+                                                    {saving ? 'Guardando...' : 'Guardar'}
+                                                </button>
+                                                <button
+                                                    onClick={handleCancelEdit}
+                                                    disabled={saving}
+                                                    className="px-2 py-1 bg-white/20 rounded text-xs font-medium hover:bg-white/30"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <h3 className="text-3xl font-bold">
+                                                {loading ? '...' : (rate ? parseFloat(rate.saleRate.toString()).toFixed(2) : 'N/A')}
+                                            </h3>
+                                            <p className="text-white/70 text-xs mt-1">{config.description}</p>
+                                        </>
+                                    )}
+                                </div>
 
-            {/* Update Rate Form */}
-            {user?.role === 'admin_venezuela' && (
-                <Card>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Actualizar Tasa</h3>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1">
-                            <Input
-                                label="Nueva Tasa (Bs/COP)"
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={newRate}
-                                onChange={(e) => setNewRate(e.target.value)}
-                            />
-                        </div>
-                        <div className="flex items-end">
-                            <Button
-                                onClick={handleUpdateRate}
-                                isLoading={saving}
-                                className="w-full sm:w-auto"
-                            >
-                                Actualizar Tasa
-                            </Button>
-                        </div>
-                    </div>
-                    {newRate && parseFloat(newRate) > 0 && currentRate && (
-                        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <p className="text-sm text-blue-900">
-                                <span className="font-semibold">Previsualización:</span> Con esta tasa, 1,000,000 COP = {(1000000 / parseFloat(newRate)).toFixed(2)} Bs
-                            </p>
-                            {currentRate && parseFloat(newRate) !== Number(currentRate.saleRate) && (
-                                <p className="text-xs text-blue-700 mt-1">
-                                    Diferencia con tasa actual: {((parseFloat(newRate) - Number(currentRate.saleRate)) / Number(currentRate.saleRate) * 100).toFixed(2)}%
-                                </p>
-                            )}
-                        </div>
-                    )}
-                </Card>
-            )}
+                                {rate && !isEditing && (
+                                    <p className="text-white/60 text-xs pt-2 border-t border-white/20">
+                                        {new Date(rate.createdAt).toLocaleDateString('es-CO')}
+                                    </p>
+                                )}
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
 
             {/* Rate History */}
             <Card>
@@ -188,16 +263,23 @@ export default function RatesPage() {
                             <table className="w-full">
                                 <thead className="bg-gray-50 border-b-2 border-gray-200">
                                     <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tasa</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actualizado por</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {rateHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((rate, index) => {
-                                        const globalIndex = (currentPage - 1) * itemsPerPage + index;
+                                    {rateHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((rate) => {
+                                        const config = RATE_CONFIGS[rate.rateType];
                                         return (
-                                            <tr key={rate.id} className={globalIndex === 0 ? 'bg-green-50' : ''}>
+                                            <tr key={rate.id} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${config.bgColor}`}>
+                                                        <span>{config.icon}</span>
+                                                        <span className="text-sm font-medium text-gray-900">{config.name}</span>
+                                                    </div>
+                                                </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
                                                     <span className="text-lg font-semibold text-gray-900">
                                                         {parseFloat(rate.saleRate.toString()).toFixed(2)}
@@ -206,16 +288,8 @@ export default function RatesPage() {
                                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                                                     {new Date(rate.createdAt).toLocaleString('es-CO')}
                                                 </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    {globalIndex === 0 ? (
-                                                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                                                            Actual
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
-                                                            Anterior
-                                                        </span>
-                                                    )}
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                                    {rate.createdBy?.name || 'N/A'}
                                                 </td>
                                             </tr>
                                         );
@@ -274,4 +348,3 @@ export default function RatesPage() {
         </div>
     );
 }
-

@@ -119,6 +119,7 @@ export class AccountsService {
     amount: number,
     transactionId: number,
     userId: number,
+    commissionAmount?: number,
   ): Promise<Account> {
     const account = await this.findOne(accountId, userId);
 
@@ -137,12 +138,16 @@ export class AccountsService {
     await this.accountsRepository.save(account);
 
     // Registrar transacción
+    const description = commissionAmount 
+      ? `Retiro por transacción #${transactionId} (incluye comisión bancaria: ${commissionAmount.toFixed(2)} Bs)`
+      : `Retiro por transacción #${transactionId}`;
+    
     await this.accountTransactionsRepository.save({
       account: { id: account.id } as any,
       amount,
       type: AccountTransactionType.WITHDRAWAL,
       transaction: { id: transactionId } as any,
-      description: `Retiro por transacción #${transactionId}`,
+      description,
       balanceBefore,
       balanceAfter: newBalance,
     });

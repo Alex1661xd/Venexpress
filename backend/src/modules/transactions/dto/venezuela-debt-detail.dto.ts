@@ -12,6 +12,8 @@ export interface TransactionDebtDetail {
   gananciaAdminColombia: number; // gananciaSistema / 2
   gananciaAdminVenezuela: number; // gananciaSistema / 2
   deudaConVenezuela: number; // inversión + gananciaAdminVenezuela
+  isPaidToVenezuela?: boolean;
+  paidToVenezuelaAt?: Date | null;
 }
 
 export interface VenezuelaDebtSummary {

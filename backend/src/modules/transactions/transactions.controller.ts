@@ -344,6 +344,7 @@ export class TransactionsController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('accountId') accountId: string,
+    @Body('bankCommissionPercentage') bankCommissionPercentage: string,
     @CurrentUser() user: any,
   ) {
     let voucherPath: string | null = null;
@@ -353,7 +354,19 @@ export class TransactionsController {
       voucherPath = await this.storageService.uploadFile(file, id, 'venezuela');
     }
 
-    return this.transactionsService.completeTransfer(+id, voucherPath, accountId ? +accountId : null, user);
+    const commissionPercentage = bankCommissionPercentage ? parseFloat(bankCommissionPercentage) : null;
+
+    return this.transactionsService.completeTransfer(+id, voucherPath, accountId ? +accountId : null, commissionPercentage, user);
+  }
+
+  @Patch(':id/bank-commission')
+  @Roles(UserRole.ADMIN_VENEZUELA)
+  async updateBankCommission(
+    @Param('id') id: string,
+    @Body('bankCommissionPercentage') bankCommissionPercentage: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.updateBankCommission(+id, bankCommissionPercentage, user);
   }
 
   @Post(':id/verify-vendor-proof')
@@ -569,6 +582,30 @@ export class TransactionsController {
   @Roles(UserRole.ADMIN_COLOMBIA)
   deleteVenezuelaPayment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.transactionsService.deleteVenezuelaPayment(+id, user);
+  }
+
+  /**
+   * Marca transacciones como pagadas a Venezuela
+   */
+  @Post('venezuela-debt/mark-paid')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  markTransactionsAsPaidToVenezuela(
+    @Body('transactionIds') transactionIds: number[],
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.markTransactionsAsPaidToVenezuela(transactionIds, user);
+  }
+
+  /**
+   * Desmarca transacciones como pagadas a Venezuela
+   */
+  @Post('venezuela-debt/mark-unpaid')
+  @Roles(UserRole.ADMIN_COLOMBIA)
+  markTransactionsAsUnpaidToVenezuela(
+    @Body('transactionIds') transactionIds: number[],
+    @CurrentUser() user: any,
+  ) {
+    return this.transactionsService.markTransactionsAsUnpaidToVenezuela(transactionIds, user);
   }
 
   /**

@@ -6,6 +6,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionStatus } from '../../common/enums/transaction-status.enum';
+import { TransactionType } from '../../common/enums/transaction-type.enum';
 import { StorageService } from '../../common/services/storage.service';
 import * as bcrypt from 'bcrypt';
 
@@ -259,6 +260,7 @@ export class UsersService {
       .where('transaction.createdBy.id = :userId', { userId })
       .andWhere('transaction.status = :status', { status: TransactionStatus.COMPLETADO })
       .andWhere('transaction.isPaidByVendor = :isPaid', { isPaid: isPaid === 'true' })
+      .andWhere('(transaction.transactionType IS NULL OR transaction.transactionType = :normalType)', { normalType: TransactionType.NORMAL })
       .andWhere('transaction.createdAt >= :dateFrom', { dateFrom })
       .andWhere('transaction.createdAt <= :dateTo', { dateTo })
       .orderBy('transaction.createdAt', 'DESC')

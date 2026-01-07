@@ -360,8 +360,21 @@ export default function TransferHistoryPage() {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-600">{transaction.beneficiaryBankName}</td>
-                                            <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                                                {formatCurrency(Number(transaction.amountCOP), 'COP')}
+                                            <td className="px-4 py-3 text-right text-sm">
+                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
+                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                                                            transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                            transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                            'bg-indigo-100 text-indigo-800'
+                                                        }`}>
+                                                            {transaction.transactionType.toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="font-semibold text-gray-900">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
                                                 {formatCurrency(Number(transaction.amountBs), 'Bs')}
@@ -453,7 +466,22 @@ export default function TransferHistoryPage() {
                                             <span className="ml-2 text-gray-900">{transaction.beneficiaryBankName}</span>
                                         </div>
                                         <div className="flex justify-between items-center">
-                                            <span className="font-semibold text-green-600">{formatCurrency(Number(transaction.amountCOP), 'COP')}</span>
+                                            {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
+                                                    <span className={`text-xs px-2 py-0.5 rounded font-bold inline-block ${
+                                                        transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                        transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                        'bg-indigo-100 text-indigo-800'
+                                                    }`}>
+                                                        {transaction.transactionType === 'dolares' ? '💵 DÓLARES' :
+                                                         transaction.transactionType === 'paypal' ? '💳 PAYPAL' :
+                                                         '💰 ZELLE'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="font-semibold text-green-600">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
+                                            )}
                                             <span className="font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</span>
                                         </div>
                                         <div>

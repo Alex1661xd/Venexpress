@@ -9,6 +9,8 @@ export type TransactionStatus =
     | 'cancelado_vendedor'
     | 'cancelado_administrador';
 
+export type TransactionType = 'normal' | 'paypal' | 'zelle' | 'dolares';
+
 export interface Transaction {
     id: number;
     createdBy: {
@@ -43,7 +45,9 @@ export interface Transaction {
     beneficiaryPhone?: string;
     beneficiaryIsPagoMovil?: boolean;
 
-    amountCOP: number;
+    transactionType?: TransactionType;
+    amountCOP?: number; // Nullable para transacciones en USD
+    amountUSD?: number; // Para transacciones PayPal, Zelle, Dólares
     amountBs: number;
     // Tasa de venta usada (campo nuevo en backend). Mantengo rateUsed para compatibilidad visual.
     saleRate?: number;
@@ -71,6 +75,9 @@ export interface Transaction {
     commissionPaidAt?: string;
     hasCustomRate?: boolean; // Indica si el vendedor usó una tasa personalizada
     transactionCommission?: number; // Comisión específica de esta transacción (2%, 4%, 5%, etc.)
+    bankCommissionPercentage?: number; // Porcentaje de comisión bancaria cobrada al completar la transferencia (ej: 3%)
+    isPaidToVenezuela?: boolean; // Indica si la deuda de esta transacción ya fue pagada a Admin Venezuela
+    paidToVenezuelaAt?: string; // Fecha en que se marcó como pagada a Venezuela
     createdAt: string;
     updatedAt: string;
     lastEditedAt?: string;
@@ -78,11 +85,14 @@ export interface Transaction {
 
 export interface CreateTransactionDto {
     beneficiaryId: number;
+    transactionType?: TransactionType;
     amountCOP?: number;
+    amountUSD?: number;
     amountBs?: number;
     clientPresencialId?: number;
     comprobanteCliente?: string;
     notes?: string;
+    customRate?: number;
 }
 
 export interface TransactionHistory {

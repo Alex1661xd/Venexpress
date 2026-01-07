@@ -24,6 +24,8 @@ interface TransactionDetail {
   gananciaAdminColombia: number;
   gananciaAdminVenezuela: number;
   deudaConVenezuela: number;
+  isPaidToVenezuela?: boolean;
+  paidToVenezuelaAt?: string | null;
 }
 
 interface PaymentDetail {
@@ -52,16 +54,14 @@ export default function VenezuelaDebtPage() {
     const today = getLocalDateString();
     return { startDate: today, endDate: today };
   });
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({
-    amount: '',
-    notes: '',
-    paymentDate: getLocalDateString(),
-  });
+  const [isFullPaymentModalOpen, setIsFullPaymentModalOpen] = useState(false);
+  const [isPartialPaymentModalOpen, setIsPartialPaymentModalOpen] = useState(false);
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [paymentProofPreview, setPaymentProofPreview] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  const [selectedTransactionsForPartial, setSelectedTransactionsForPartial] = useState<Set<number>>(new Set());
+  const [processing, setProcessing] = useState(false);
   const [alertState, setAlertState] = useState<{
     isOpen: boolean;
     message: string;
@@ -117,34 +117,54 @@ export default function VenezuelaDebtPage() {
 
   const handlePayFull = () => {
     if (!debtSummary) return;
-    // Usar la fecha final del rango seleccionado como fecha de pago
-    const paymentDate = filters.endDate || getLocalDateString();
-    setPaymentForm({
-      amount: debtSummary.pendingDebt.toString(),
-      notes: 'Pago completo de deuda',
-      paymentDate: paymentDate,
-    });
     setPaymentProof(null);
     setPaymentProofPreview('');
-    setIsPaymentModalOpen(true);
+    setIsFullPaymentModalOpen(true);
   };
 
   const handlePayPartial = () => {
-    setPaymentForm({
-      amount: '',
-      notes: '',
-      paymentDate: getLocalDateString(),
-    });
+    if (!debtSummary) return;
+    // Seleccionar todas las transacciones pendientes por defecto
+    const unpaidTransactions = debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela);
+    setSelectedTransactionsForPartial(new Set(unpaidTransactions.map(tx => tx.id)));
     setPaymentProof(null);
     setPaymentProofPreview('');
-    setIsPaymentModalOpen(true);
+    setIsPartialPaymentModalOpen(true);
   };
 
-  const handleSubmitPayment = async () => {
-    if (!paymentForm.amount || Number(paymentForm.amount) <= 0) {
+  const handleToggleTransactionForPartial = (transactionId: number) => {
+    setSelectedTransactionsForPartial(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(transactionId)) {
+        newSet.delete(transactionId);
+      } else {
+        newSet.add(transactionId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllForPartial = () => {
+    if (!debtSummary) return;
+    const unpaidTransactions = debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela);
+    setSelectedTransactionsForPartial(new Set(unpaidTransactions.map(tx => tx.id)));
+  };
+
+  const handleDeselectAllForPartial = () => {
+    setSelectedTransactionsForPartial(new Set());
+  };
+
+  const handleSubmitFullPayment = async () => {
+    if (!debtSummary) return;
+    
+    const unpaidTransactionIds = debtSummary.transactionDetails
+      .filter(tx => !tx.isPaidToVenezuela)
+      .map(tx => tx.id);
+
+    if (unpaidTransactionIds.length === 0) {
       setAlertState({
         isOpen: true,
-        message: 'El monto debe ser mayor a 0',
+        message: 'No hay transacciones pendientes para marcar como pagadas',
         variant: 'warning',
       });
       return;
@@ -152,32 +172,76 @@ export default function VenezuelaDebtPage() {
 
     setConfirmState({
       isOpen: true,
-      message: `¿Confirmar pago de ${formatCOP(Number(paymentForm.amount))} a Admin Venezuela?`,
+      message: `¿Confirmar pago completo de ${formatCOP(debtSummary.pendingDebt)}? Se marcarán ${unpaidTransactionIds.length} transacción(es) como pagada(s).`,
       onConfirm: async () => {
         try {
           setSubmitting(true);
-          await transactionsService.createVenezuelaPayment({
-            amount: Number(paymentForm.amount),
-            notes: paymentForm.notes,
-            paymentDate: paymentForm.paymentDate,
-            proof: paymentProof || undefined,
-          });
+          await transactionsService.markTransactionsAsPaidToVenezuela(unpaidTransactionIds);
           setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
-          setIsPaymentModalOpen(false);
+          setIsFullPaymentModalOpen(false);
           setPaymentProof(null);
           setPaymentProofPreview('');
           setAlertState({
             isOpen: true,
-            message: 'Pago registrado exitosamente',
+            message: `${unpaidTransactionIds.length} transacción(es) marcada(s) como pagada(s) exitosamente`,
             variant: 'success',
           });
           await loadDebtDetail();
-        } catch (error) {
-          console.error('Error submitting payment:', error);
+        } catch (error: any) {
+          console.error('Error marking transactions as paid:', error);
           setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
           setAlertState({
             isOpen: true,
-            message: 'Error al registrar el pago',
+            message: error.response?.data?.message || 'Error al marcar las transacciones como pagadas',
+            variant: 'error',
+          });
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
+  };
+
+  const handleSubmitPartialPayment = async () => {
+    if (!debtSummary) return;
+    
+    if (selectedTransactionsForPartial.size === 0) {
+      setAlertState({
+        isOpen: true,
+        message: 'Debes seleccionar al menos una transacción',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const selectedIds = Array.from(selectedTransactionsForPartial);
+    const selectedDetails = debtSummary.transactionDetails.filter(tx => selectedIds.includes(tx.id));
+    const totalAmount = selectedDetails.reduce((sum, tx) => sum + tx.deudaConVenezuela, 0);
+
+    setConfirmState({
+      isOpen: true,
+      message: `¿Confirmar pago parcial de ${formatCOP(totalAmount)}? Se marcarán ${selectedIds.length} transacción(es) como pagada(s).`,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          await transactionsService.markTransactionsAsPaidToVenezuela(selectedIds);
+          setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
+          setIsPartialPaymentModalOpen(false);
+          setSelectedTransactionsForPartial(new Set());
+          setPaymentProof(null);
+          setPaymentProofPreview('');
+          setAlertState({
+            isOpen: true,
+            message: `${selectedIds.length} transacción(es) marcada(s) como pagada(s) exitosamente`,
+            variant: 'success',
+          });
+          await loadDebtDetail();
+        } catch (error: any) {
+          console.error('Error marking transactions as paid:', error);
+          setConfirmState({ isOpen: false, message: '', onConfirm: () => {} });
+          setAlertState({
+            isOpen: true,
+            message: error.response?.data?.message || 'Error al marcar las transacciones como pagadas',
             variant: 'error',
           });
         } finally {
@@ -422,6 +486,9 @@ export default function VenezuelaDebtPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Estado
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                         Fecha
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
@@ -454,8 +521,24 @@ export default function VenezuelaDebtPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {debtSummary.transactionDetails.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-gray-50">
+                    {debtSummary.transactionDetails.map((tx) => {
+                      const isPaid = tx.isPaidToVenezuela || false;
+                      return (
+                      <tr 
+                        key={tx.id} 
+                        className={`hover:bg-gray-50 ${isPaid ? 'bg-green-50' : ''}`}
+                      >
+                        <td className="px-3 py-2">
+                          {isPaid ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              ✓ Pagada
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              Pendiente
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap text-gray-600">
                           {formatDate(tx.createdAt)}
                         </td>
@@ -483,17 +566,31 @@ export default function VenezuelaDebtPage() {
                         <td className="px-3 py-2 whitespace-nowrap text-right text-purple-600 font-medium">
                           {formatCOP(tx.gananciaAdminVenezuela)}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right text-amber-700 font-bold bg-amber-50">
+                        <td className={`px-3 py-2 whitespace-nowrap text-right font-bold ${isPaid ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50'}`}>
                           {formatCOP(tx.deudaConVenezuela)}
                         </td>
+                        <td className="px-3 py-2 text-center">
+                          {isPaid && tx.paidToVenezuelaAt && (
+                            <button
+                              onClick={() => handleMarkAsUnpaid([tx.id])}
+                              disabled={processing}
+                              className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                              title="Desmarcar como pagada"
+                            >
+                              Desmarcar
+                            </button>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                   <tfoot className="bg-gray-100 border-t-2 border-gray-300">
                     <tr>
-                      <td colSpan={6} className="px-3 py-2 text-sm font-bold text-gray-900">
+                      <td colSpan={2} className="px-3 py-2 text-sm font-bold text-gray-900">
                         TOTAL
                       </td>
+                      <td colSpan={5}></td>
                       <td className="px-3 py-2 text-right text-sm font-bold text-blue-600">
                         {formatCOP(
                           debtSummary.transactionDetails.reduce(
@@ -521,6 +618,7 @@ export default function VenezuelaDebtPage() {
                       <td className="px-3 py-2 text-right text-sm font-bold text-amber-700 bg-amber-100">
                         {formatCOP(debtSummary.totalDebt)}
                       </td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -668,62 +766,28 @@ export default function VenezuelaDebtPage() {
         </>
       )}
 
-      {/* Modal de pago */}
+      {/* Modal de pago completo */}
       <Modal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        title="Registrar Pago a Venezuela"
+        isOpen={isFullPaymentModalOpen}
+        onClose={() => {
+          setIsFullPaymentModalOpen(false);
+          setPaymentProof(null);
+          setPaymentProofPreview('');
+        }}
+        title="Pagar Deuda Completa"
         size="md"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Monto (COP) *
-            </label>
-            <input
-              type="number"
-              value={paymentForm.amount}
-              onChange={(e) =>
-                setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))
-              }
-              min="0"
-              step="1"
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
-              placeholder="Ej: 1000000"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Fecha del Pago *
-            </label>
-            <input
-              type="date"
-              value={paymentForm.paymentDate}
-              onChange={(e) =>
-                setPaymentForm((prev) => ({
-                  ...prev,
-                  paymentDate: e.target.value,
-                }))
-              }
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Notas / Referencia
-            </label>
-            <textarea
-              value={paymentForm.notes}
-              onChange={(e) =>
-                setPaymentForm((prev) => ({ ...prev, notes: e.target.value }))
-              }
-              rows={3}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none resize-none"
-              placeholder="Ej: Transferencia Bancolombia, referencia #12345"
-            />
-          </div>
+          {debtSummary && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900">
+                <strong>Total a pagar:</strong> {formatCOP(debtSummary.pendingDebt)}
+              </p>
+              <p className="text-xs text-blue-700 mt-1">
+                Se marcarán {debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).length} transacción(es) como pagada(s).
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -763,18 +827,184 @@ export default function VenezuelaDebtPage() {
           <div className="flex flex-col sm:flex-row gap-3 pt-4">
             <Button
               variant="outline"
-              onClick={() => setIsPaymentModalOpen(false)}
+              onClick={() => {
+                setIsFullPaymentModalOpen(false);
+                setPaymentProof(null);
+                setPaymentProofPreview('');
+              }}
               className="flex-1"
             >
               Cancelar
             </Button>
             <Button
               variant="primary"
-              onClick={handleSubmitPayment}
-              disabled={submitting || !paymentForm.amount}
+              onClick={handleSubmitFullPayment}
+              disabled={submitting}
               className="flex-1"
             >
-              {submitting ? 'Registrando...' : 'Registrar Pago'}
+              {submitting ? 'Procesando...' : 'Confirmar Pago Completo'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de pago parcial */}
+      <Modal
+        isOpen={isPartialPaymentModalOpen}
+        onClose={() => {
+          setIsPartialPaymentModalOpen(false);
+          setSelectedTransactionsForPartial(new Set());
+          setPaymentProof(null);
+          setPaymentProofPreview('');
+        }}
+        title="Pago Parcial"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-600">
+              Selecciona las transacciones que deseas marcar como pagadas:
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSelectAllForPartial}
+              >
+                Seleccionar Todas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeselectAllForPartial}
+                disabled={selectedTransactionsForPartial.size === 0}
+              >
+                Deseleccionar Todas
+              </Button>
+            </div>
+          </div>
+
+          {debtSummary && selectedTransactionsForPartial.size > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-900">
+                <strong>{selectedTransactionsForPartial.size}</strong> transacción(es) seleccionada(s). 
+                Total: <strong>{formatCOP(
+                  debtSummary.transactionDetails
+                    .filter(tx => selectedTransactionsForPartial.has(tx.id))
+                    .reduce((sum, tx) => sum + tx.deudaConVenezuela, 0)
+                )}</strong>
+              </p>
+            </div>
+          )}
+
+          <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-center w-12">
+                    <input
+                      type="checkbox"
+                      checked={debtSummary && debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).length > 0 && 
+                               debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).every(tx => selectedTransactionsForPartial.has(tx.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          handleSelectAllForPartial();
+                        } else {
+                          handleDeselectAllForPartial();
+                        }
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Beneficiario</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">COP</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Deuda</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {debtSummary?.transactionDetails
+                  .filter(tx => !tx.isPaidToVenezuela)
+                  .map((tx) => {
+                    const isSelected = selectedTransactionsForPartial.has(tx.id);
+                    return (
+                      <tr 
+                        key={tx.id} 
+                        className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}
+                      >
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleTransactionForPartial(tx.id)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-gray-900">#{tx.id}</td>
+                        <td className="px-3 py-2 text-gray-600">{formatDate(tx.createdAt)}</td>
+                        <td className="px-3 py-2 text-gray-900">{tx.beneficiaryFullName}</td>
+                        <td className="px-3 py-2 text-right text-gray-900">{formatCOP(tx.amountCOP)}</td>
+                        <td className="px-3 py-2 text-right font-medium text-amber-700">{formatCOP(tx.deudaConVenezuela)}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Comprobante de Pago (Opcional)
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setPaymentProof(file);
+                  if (file.type.startsWith('image/')) {
+                    setPaymentProofPreview(URL.createObjectURL(file));
+                  } else {
+                    setPaymentProofPreview('');
+                  }
+                }
+              }}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none"
+            />
+            {paymentProofPreview && (
+              <div className="mt-3">
+                <img src={paymentProofPreview} alt="Preview" className="max-h-48 rounded-lg border border-gray-200" />
+              </div>
+            )}
+            {!paymentProofPreview && paymentProof && (
+              <p className="mt-2 text-sm text-blue-600 font-medium">
+                Archivo seleccionado: {paymentProof.name}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPartialPaymentModalOpen(false);
+                setSelectedTransactionsForPartial(new Set());
+                setPaymentProof(null);
+                setPaymentProofPreview('');
+              }}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSubmitPartialPayment}
+              disabled={submitting || selectedTransactionsForPartial.size === 0}
+              className="flex-1"
+            >
+              {submitting ? 'Procesando...' : `Confirmar Pago (${selectedTransactionsForPartial.size})`}
             </Button>
           </div>
         </div>

@@ -38,6 +38,17 @@ interface ReportData {
         from: string;
         to: string;
     };
+    usdMetrics?: {
+        totalTransactions: number;
+        completedCount: number;
+        totalAmountUSD: number;
+        totalAmountBs: number;
+        byType: {
+            dolares: number;
+            paypal: number;
+            zelle: number;
+        };
+    };
 }
 
 interface AdminColombiaFinancialSummary {
@@ -60,6 +71,16 @@ interface AdminColombiaFinancialSummary {
         amountOwedToVenezuela: number;
     }>;
     dateRange: { from: string; to: string };
+    usdMetrics?: {
+        totalTransactions: number;
+        totalAmountUSD: number;
+        totalAmountBs: number;
+        byType: {
+            dolares: number;
+            paypal: number;
+            zelle: number;
+        };
+    };
 }
 
 interface MonthlyStats {
@@ -180,9 +201,12 @@ export default function ReportsPage() {
         }
     };
 
-    const formatCurrency = (amount: number, currency: 'COP' | 'Bs') => {
+    const formatCurrency = (amount: number, currency: 'COP' | 'Bs' | 'USD') => {
         if (currency === 'COP') {
             return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+        }
+        if (currency === 'USD') {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
         }
         return `${amount.toFixed(2)} Bs`;
     };
@@ -627,6 +651,105 @@ export default function ReportsPage() {
                                         </tr>
                                     </tfoot>
                                 </table>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* USD Transactions Section */}
+                    {reportData?.usdMetrics && reportData.usdMetrics.totalTransactions > 0 && (
+                        <Card className="mt-6 border-2 border-purple-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <h3 className="text-lg font-bold text-gray-900">Transacciones en Dólares (USD)</h3>
+                                <span className="text-xs text-gray-500 italic">(No incluidas en estadísticas principales)</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div className="bg-purple-50 p-4 rounded-lg">
+                                    <p className="text-sm text-purple-700 font-medium mb-1">Total Transacciones USD</p>
+                                    <p className="text-2xl font-bold text-purple-900">{reportData.usdMetrics.totalTransactions}</p>
+                                    <p className="text-xs text-purple-600 mt-1">
+                                        Completadas: {reportData.usdMetrics.completedCount}
+                                    </p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                    <p className="text-sm text-green-700 font-medium mb-1">Total Dólares Movidos</p>
+                                    <p className="text-2xl font-bold text-green-900">
+                                        {formatCurrency(reportData.usdMetrics.totalAmountUSD, 'USD')}
+                                    </p>
+                                </div>
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <p className="text-sm text-blue-700 font-medium mb-1">Total Bolívares (USD)</p>
+                                    <p className="text-2xl font-bold text-blue-900">
+                                        {formatCurrency(reportData.usdMetrics.totalAmountBs, 'Bs')}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-4">
+                                <p className="text-sm font-medium text-gray-700 mb-2">Desglose por Tipo:</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="text-center p-3 bg-green-100 rounded-lg">
+                                        <p className="text-xs text-green-700 font-medium">Dólares</p>
+                                        <p className="text-lg font-bold text-green-900">{reportData.usdMetrics.byType.dolares}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-purple-100 rounded-lg">
+                                        <p className="text-xs text-purple-700 font-medium">PayPal</p>
+                                        <p className="text-lg font-bold text-purple-900">{reportData.usdMetrics.byType.paypal}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-indigo-100 rounded-lg">
+                                        <p className="text-xs text-indigo-700 font-medium">Zelle</p>
+                                        <p className="text-lg font-bold text-indigo-900">{reportData.usdMetrics.byType.zelle}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Admin Colombia USD Metrics */}
+                    {user?.role === 'admin_colombia' && adminSummary?.usdMetrics && adminSummary.usdMetrics.totalTransactions > 0 && (
+                        <Card className="mt-6 border-2 border-purple-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <h3 className="text-lg font-bold text-gray-900">Transacciones en Dólares (USD) - Admin Colombia</h3>
+                                <span className="text-xs text-gray-500 italic">(No incluidas en ganancias/deuda)</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div className="bg-purple-50 p-4 rounded-lg">
+                                    <p className="text-sm text-purple-700 font-medium mb-1">Total Transacciones USD</p>
+                                    <p className="text-2xl font-bold text-purple-900">{adminSummary.usdMetrics.totalTransactions}</p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                    <p className="text-sm text-green-700 font-medium mb-1">Total Dólares Movidos</p>
+                                    <p className="text-2xl font-bold text-green-900">
+                                        {formatCurrency(adminSummary.usdMetrics.totalAmountUSD, 'USD')}
+                                    </p>
+                                </div>
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <p className="text-sm text-blue-700 font-medium mb-1">Total Bolívares (USD)</p>
+                                    <p className="text-2xl font-bold text-blue-900">
+                                        {formatCurrency(adminSummary.usdMetrics.totalAmountBs, 'Bs')}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-4">
+                                <p className="text-sm font-medium text-gray-700 mb-2">Desglose por Tipo:</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="text-center p-3 bg-green-100 rounded-lg">
+                                        <p className="text-xs text-green-700 font-medium">Dólares</p>
+                                        <p className="text-lg font-bold text-green-900">{adminSummary.usdMetrics.byType.dolares}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-purple-100 rounded-lg">
+                                        <p className="text-xs text-purple-700 font-medium">PayPal</p>
+                                        <p className="text-lg font-bold text-purple-900">{adminSummary.usdMetrics.byType.paypal}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-indigo-100 rounded-lg">
+                                        <p className="text-xs text-indigo-700 font-medium">Zelle</p>
+                                        <p className="text-lg font-bold text-indigo-900">{adminSummary.usdMetrics.byType.zelle}</p>
+                                    </div>
+                                </div>
                             </div>
                         </Card>
                     )}

@@ -114,13 +114,16 @@ export const transactionsService = {
         return response.data;
     },
 
-    async completeTransfer(id: number, voucher?: File, accountId?: number): Promise<Transaction> {
+    async completeTransfer(id: number, voucher?: File, accountId?: number, bankCommissionPercentage?: number): Promise<Transaction> {
         const formData = new FormData();
         if (voucher) {
             formData.append('voucher', voucher);
         }
         if (accountId) {
             formData.append('accountId', accountId.toString());
+        }
+        if (bankCommissionPercentage !== undefined) {
+            formData.append('bankCommissionPercentage', bankCommissionPercentage.toString());
         }
         const response = await api.post<Transaction>(`/transactions/${id}/complete`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -130,6 +133,13 @@ export const transactionsService = {
 
     async verifyVendorPaymentProof(id: number): Promise<Transaction> {
         const response = await api.post<Transaction>(`/transactions/${id}/verify-vendor-proof`);
+        return response.data;
+    },
+
+    async updateBankCommission(id: number, bankCommissionPercentage: number): Promise<Transaction> {
+        const response = await api.patch<Transaction>(`/transactions/${id}/bank-commission`, {
+            bankCommissionPercentage,
+        });
         return response.data;
     },
 
@@ -350,6 +360,20 @@ export const transactionsService = {
      */
     async deleteVenezuelaPayment(id: number): Promise<void> {
         await api.delete(`/transactions/venezuela-debt/payment/${id}`);
+    },
+
+    async markTransactionsAsPaidToVenezuela(transactionIds: number[]): Promise<any> {
+        const response = await api.post('/transactions/venezuela-debt/mark-paid', {
+            transactionIds,
+        });
+        return response.data;
+    },
+
+    async markTransactionsAsUnpaidToVenezuela(transactionIds: number[]): Promise<any> {
+        const response = await api.post('/transactions/venezuela-debt/mark-unpaid', {
+            transactionIds,
+        });
+        return response.data;
     },
 
     /**
