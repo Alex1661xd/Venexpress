@@ -56,9 +56,12 @@ export default function TransferHistoryPage() {
         }
     };
 
-    const formatCurrency = (amount: number, currency: 'COP' | 'Bs') => {
+    const formatCurrency = (amount: number, currency: 'COP' | 'Bs' | 'USD') => {
         if (currency === 'COP') {
             return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+        }
+        if (currency === 'USD') {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
         }
         return `${amount.toFixed(2)} Bs`;
     };
@@ -124,9 +127,12 @@ export default function TransferHistoryPage() {
         const tx = transactionToCopy;
         const isPagoMovil = tx.beneficiaryIsPagoMovil;
 
-        const formatCurr = (amount: number, currency: 'COP' | 'Bs') => {
+        const formatCurr = (amount: number, currency: 'COP' | 'Bs' | 'USD') => {
             if (currency === 'COP') {
                 return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
+            }
+            if (currency === 'USD') {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
             }
             return `${amount.toFixed(2)} Bs`;
         };
@@ -332,87 +338,86 @@ export default function TransferHistoryPage() {
                                     {currentTransactions.map((transaction) => {
                                         const isCustomRate = hasCustomRate(transaction);
                                         return (
-                                        <tr 
-                                            key={transaction.id} 
-                                            className={`hover:bg-gray-50 ${isCustomRate ? 'bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-purple-400' : ''}`}
-                                        >
-                                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                                <div className="flex items-center gap-2">
-                                                    #{transaction.id}
+                                            <tr
+                                                key={transaction.id}
+                                                className={`hover:bg-gray-50 ${isCustomRate ? 'bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-purple-400' : ''}`}
+                                            >
+                                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                                    <div className="flex items-center gap-2">
+                                                        #{transaction.id}
+                                                        {isCustomRate && (
+                                                            <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                                TASA PERSONALIZADA
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-sm font-medium text-gray-900">{transaction.beneficiaryFullName}</div>
+                                                    <div className="text-xs text-gray-500">{transaction.beneficiaryDocumentId}</div>
                                                     {isCustomRate && (
-                                                        <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
-                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            TASA PERSONALIZADA
-                                                        </span>
+                                                        <div className="mt-1 p-2 bg-purple-100 border border-purple-300 rounded text-xs">
+                                                            <p className="font-semibold text-purple-900">⚠️ Tasa personalizada aplicada</p>
+                                                            <p className="text-purple-700">Tasa: {transaction.saleRate != null && !isNaN(Number(transaction.saleRate)) ? Number(transaction.saleRate).toFixed(2) : '-'}</p>
+                                                        </div>
                                                     )}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="text-sm font-medium text-gray-900">{transaction.beneficiaryFullName}</div>
-                                                <div className="text-xs text-gray-500">{transaction.beneficiaryDocumentId}</div>
-                                                {isCustomRate && (
-                                                    <div className="mt-1 p-2 bg-purple-100 border border-purple-300 rounded text-xs">
-                                                        <p className="font-semibold text-purple-900">⚠️ Tasa personalizada aplicada</p>
-                                                        <p className="text-purple-700">Tasa: {transaction.saleRate != null && !isNaN(Number(transaction.saleRate)) ? Number(transaction.saleRate).toFixed(2) : '-'}</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600">{transaction.beneficiaryBankName}</td>
+                                                <td className="px-4 py-3 text-right text-sm">
+                                                    {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                                    transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                                        'bg-indigo-100 text-indigo-800'
+                                                                }`}>
+                                                                {transaction.transactionType.toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="font-semibold text-gray-900">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
+                                                    {formatCurrency(Number(transaction.amountBs), 'Bs')}
+                                                </td>
+                                                <td className="px-4 py-3 text-center text-sm font-medium text-gray-900">
+                                                    {(transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString())))
+                                                        ? parseFloat(transaction.saleRate.toString()).toFixed(2)
+                                                        : (transaction.rateUsed != null && !isNaN(parseFloat(transaction.rateUsed.toString())) ? parseFloat(transaction.rateUsed.toString()).toFixed(2) : '-')}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <Badge status={transaction.status} />
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-600">
+                                                    {new Date(transaction.createdAt).toLocaleDateString('es-CO')}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex gap-2 justify-end">
+                                                        <button
+                                                            onClick={() => handleViewDetails(transaction)}
+                                                            className="text-purple-600 hover:text-purple-900 font-medium text-sm"
+                                                            title="Ver detalles"
+                                                        >
+                                                            Ver detalles
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleCopyToClipboard(transaction)}
+                                                            className="text-blue-600 hover:text-blue-900 font-medium text-sm flex items-center"
+                                                            title="Copiar datos"
+                                                        >
+                                                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                            </svg>
+                                                            Copiar
+                                                        </button>
                                                     </div>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">{transaction.beneficiaryBankName}</td>
-                                            <td className="px-4 py-3 text-right text-sm">
-                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
-                                                    <div className="flex flex-col items-end gap-1">
-                                                        <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
-                                                        <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
-                                                            transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
-                                                            transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
-                                                            'bg-indigo-100 text-indigo-800'
-                                                        }`}>
-                                                            {transaction.transactionType.toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <span className="font-semibold text-gray-900">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
-                                                {formatCurrency(Number(transaction.amountBs), 'Bs')}
-                                            </td>
-                                            <td className="px-4 py-3 text-center text-sm font-medium text-gray-900">
-                                                {(transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString())))
-                                                    ? parseFloat(transaction.saleRate.toString()).toFixed(2)
-                                                    : (transaction.rateUsed != null && !isNaN(parseFloat(transaction.rateUsed.toString())) ? parseFloat(transaction.rateUsed.toString()).toFixed(2) : '-')}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <Badge status={transaction.status} />
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-gray-600">
-                                                {new Date(transaction.createdAt).toLocaleDateString('es-CO')}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="flex gap-2 justify-end">
-                                                    <button
-                                                        onClick={() => handleViewDetails(transaction)}
-                                                        className="text-purple-600 hover:text-purple-900 font-medium text-sm"
-                                                        title="Ver detalles"
-                                                    >
-                                                        Ver detalles
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleCopyToClipboard(transaction)}
-                                                        className="text-blue-600 hover:text-blue-900 font-medium text-sm flex items-center"
-                                                        title="Copiar datos"
-                                                    >
-                                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                                        </svg>
-                                                        Copiar
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
+                                                </td>
+                                            </tr>
+                                        );
                                     })}
                                 </tbody>
                             </table>
@@ -423,98 +428,96 @@ export default function TransferHistoryPage() {
                             {currentTransactions.map((transaction) => {
                                 const isCustomRate = hasCustomRate(transaction);
                                 return (
-                                <div 
-                                    key={transaction.id} 
-                                    className={`rounded-xl p-4 ${
-                                        isCustomRate 
-                                            ? 'border-2 border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50' 
-                                            : 'border border-gray-200'
-                                    }`}
-                                >
-                                    {isCustomRate && (
-                                        <div className="mb-2 px-2 py-1 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center gap-1 w-fit">
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            TASA PERSONALIZADA
-                                        </div>
-                                    )}
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className="font-semibold text-gray-900">#{transaction.id}</span>
-                                        <Badge status={transaction.status} />
-                                    </div>
-                                    {isCustomRate && (
-                                        <div className="mb-3 p-2 bg-purple-100 border border-purple-300 rounded-lg">
-                                            <div className="flex items-start gap-2">
-                                                <svg className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <div
+                                        key={transaction.id}
+                                        className={`rounded-xl p-4 ${isCustomRate
+                                                ? 'border-2 border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50'
+                                                : 'border border-gray-200'
+                                            }`}
+                                    >
+                                        {isCustomRate && (
+                                            <div className="mb-2 px-2 py-1 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center gap-1 w-fit">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
-                                                <div>
-                                                    <p className="text-xs font-semibold text-purple-900">⚠️ Esta transacción utiliza una tasa personalizada</p>
-                                                    <p className="text-xs text-purple-700 mt-0.5">Tasa aplicada: {transaction.saleRate != null && !isNaN(Number(transaction.saleRate)) ? Number(transaction.saleRate).toFixed(2) : '-'}</p>
+                                                TASA PERSONALIZADA
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="font-semibold text-gray-900">#{transaction.id}</span>
+                                            <Badge status={transaction.status} />
+                                        </div>
+                                        {isCustomRate && (
+                                            <div className="mb-3 p-2 bg-purple-100 border border-purple-300 rounded-lg">
+                                                <div className="flex items-start gap-2">
+                                                    <svg className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <div>
+                                                        <p className="text-xs font-semibold text-purple-900">⚠️ Esta transacción utiliza una tasa personalizada</p>
+                                                        <p className="text-xs text-purple-700 mt-0.5">Tasa aplicada: {transaction.saleRate != null && !isNaN(Number(transaction.saleRate)) ? Number(transaction.saleRate).toFixed(2) : '-'}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
-                                    <div className="space-y-2 text-sm">
-                                        <div>
-                                            <span className="text-gray-500">Beneficiario:</span>
-                                            <span className="ml-2 text-gray-900 font-medium">{transaction.beneficiaryFullName}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-500">Banco:</span>
-                                            <span className="ml-2 text-gray-900">{transaction.beneficiaryBankName}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            {transaction.transactionType && transaction.transactionType !== 'normal' ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
-                                                    <span className={`text-xs px-2 py-0.5 rounded font-bold inline-block ${
-                                                        transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
-                                                        transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
-                                                        'bg-indigo-100 text-indigo-800'
-                                                    }`}>
-                                                        {transaction.transactionType === 'dolares' ? '💵 DÓLARES' :
-                                                         transaction.transactionType === 'paypal' ? '💳 PAYPAL' :
-                                                         '💰 ZELLE'}
-                                                    </span>
+                                        )}
+                                        <div className="space-y-2 text-sm">
+                                            <div>
+                                                <span className="text-gray-500">Beneficiario:</span>
+                                                <span className="ml-2 text-gray-900 font-medium">{transaction.beneficiaryFullName}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-500">Banco:</span>
+                                                <span className="ml-2 text-gray-900">{transaction.beneficiaryBankName}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                {transaction.transactionType && transaction.transactionType !== 'normal' ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-semibold text-purple-600">{formatCurrency(Number(transaction.amountUSD || 0), 'USD')}</span>
+                                                        <span className={`text-xs px-2 py-0.5 rounded font-bold inline-block ${transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
+                                                                transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                                    'bg-indigo-100 text-indigo-800'
+                                                            }`}>
+                                                            {transaction.transactionType === 'dolares' ? '💵 DÓLARES' :
+                                                                transaction.transactionType === 'paypal' ? '💳 PAYPAL' :
+                                                                    '💰 ZELLE'}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="font-semibold text-green-600">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
+                                                )}
+                                                <span className="font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-500">Tasa:</span>
+                                                <span className="ml-2 text-gray-900 font-semibold">
+                                                    {(transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString())))
+                                                        ? parseFloat(transaction.saleRate.toString()).toFixed(2)
+                                                        : (transaction.rateUsed != null && !isNaN(parseFloat(transaction.rateUsed.toString())) ? parseFloat(transaction.rateUsed.toString()).toFixed(2) : '-')}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                                <span className="text-xs text-gray-500">{new Date(transaction.createdAt).toLocaleDateString('es-CO')}</span>
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => handleViewDetails(transaction)}
+                                                        className="text-purple-600 hover:text-purple-900 font-medium text-sm"
+                                                    >
+                                                        Detalles
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleCopyToClipboard(transaction)}
+                                                        className="text-blue-600 hover:text-blue-900 font-medium text-sm flex items-center"
+                                                    >
+                                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                        </svg>
+                                                        Copiar
+                                                    </button>
                                                 </div>
-                                            ) : (
-                                                <span className="font-semibold text-green-600">{formatCurrency(Number(transaction.amountCOP || 0), 'COP')}</span>
-                                            )}
-                                            <span className="font-semibold text-blue-600">{formatCurrency(Number(transaction.amountBs), 'Bs')}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-500">Tasa:</span>
-                                            <span className="ml-2 text-gray-900 font-semibold">
-                                                {(transaction.saleRate != null && !isNaN(parseFloat(transaction.saleRate.toString())))
-                                                    ? parseFloat(transaction.saleRate.toString()).toFixed(2)
-                                                    : (transaction.rateUsed != null && !isNaN(parseFloat(transaction.rateUsed.toString())) ? parseFloat(transaction.rateUsed.toString()).toFixed(2) : '-')}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                                            <span className="text-xs text-gray-500">{new Date(transaction.createdAt).toLocaleDateString('es-CO')}</span>
-                                            <div className="flex gap-3">
-                                                <button
-                                                    onClick={() => handleViewDetails(transaction)}
-                                                    className="text-purple-600 hover:text-purple-900 font-medium text-sm"
-                                                >
-                                                    Detalles
-                                                </button>
-                                                <button
-                                                    onClick={() => handleCopyToClipboard(transaction)}
-                                                    className="text-blue-600 hover:text-blue-900 font-medium text-sm flex items-center"
-                                                >
-                                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                                    </svg>
-                                                    Copiar
-                                                </button>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
+                                );
                             })}
                         </div>
 
