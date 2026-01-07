@@ -934,8 +934,8 @@ export default function VenezuelaDebtPage() {
                   <th className="px-3 py-2 text-center w-12">
                     <input
                       type="checkbox"
-                      checked={debtSummary && debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).length > 0 &&
-                        debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).every(tx => selectedTransactionsForPartial.has(tx.id))}
+                      checked={(debtSummary && debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).length > 0 &&
+                        debtSummary.transactionDetails.filter(tx => !tx.isPaidToVenezuela).every(tx => selectedTransactionsForPartial.has(tx.id))) || false}
                       onChange={(e) => {
                         if (e.target.checked) {
                           handleSelectAllForPartial();
