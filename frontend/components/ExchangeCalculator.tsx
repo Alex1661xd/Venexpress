@@ -16,6 +16,8 @@ interface ExchangeCalculatorProps {
     onClose: () => void;
 }
 
+
+
 export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeCalculatorProps) {
     const [calculatorType, setCalculatorType] = useState<CalculatorType>('actual');
     const [amountCOP, setAmountCOP] = useState('');
@@ -36,9 +38,9 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
     };
 
     const formatUSD = (value: number) => {
-        return new Intl.NumberFormat('en-US', { 
-            minimumFractionDigits: 2, 
-            maximumFractionDigits: 2 
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         }).format(value);
     };
 
@@ -89,13 +91,13 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
             if (!isNaN(usd) && usd > 0) {
                 const bancoCentralRate = rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()) : 0;
                 const actualRate = rates.actual?.saleRate ? parseFloat(rates.actual.saleRate.toString()) : 0;
-                
+
                 // USD → COP: USD × banco_central × tasa_actual
                 if (bancoCentralRate > 0 && actualRate > 0) {
                     const cop = usd * bancoCentralRate * actualRate;
                     setAmountCOP(formatCOP(cop));
                 }
-                
+
                 // USD → Bs: USD × banco_central
                 if (bancoCentralRate > 0) {
                     const bs = usd * bancoCentralRate;
@@ -116,15 +118,15 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
             }
             const cop = parseFloat(rawValue);
             setAmountCOP(formatCOP(cop));
-            
+
             const bancoCentralRate = rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()) : 0;
             const actualRate = rates.actual?.saleRate ? parseFloat(rates.actual.saleRate.toString()) : 0;
-            
+
             // COP → USD: COP / (banco_central × tasa_actual)
             if (bancoCentralRate > 0 && actualRate > 0) {
                 const usd = cop / (bancoCentralRate * actualRate);
                 setAmountUSD(formatUSD(usd));
-                
+
                 // USD → Bs: USD × banco_central
                 const bs = usd * bancoCentralRate;
                 setAmountBs(Math.round(bs).toString());
@@ -138,12 +140,12 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
             const bs = parseFloat(value);
             const bancoCentralRate = rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()) : 0;
             const actualRate = rates.actual?.saleRate ? parseFloat(rates.actual.saleRate.toString()) : 0;
-            
+
             // Bs → USD: Bs / banco_central
             if (bancoCentralRate > 0) {
                 const usd = bs / bancoCentralRate;
                 setAmountUSD(formatUSD(usd));
-                
+
                 // USD → COP: USD × banco_central × tasa_actual
                 if (actualRate > 0) {
                     const cop = usd * bancoCentralRate * actualRate;
@@ -202,7 +204,7 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
         if (value && !isNaN(parseFloat(value))) {
             const bs = parseFloat(value);
             const paypalRate = rates.paypal?.saleRate ? parseFloat(rates.paypal.saleRate.toString()) : 0;
-            
+
             // Bs → USD: Bs / tasa_paypal
             if (paypalRate > 0) {
                 const usd = bs / paypalRate;
@@ -219,7 +221,7 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
         if (value && !isNaN(parseFloat(value))) {
             const bs = parseFloat(value);
             const zelleRate = rates.zelle?.saleRate ? parseFloat(rates.zelle.saleRate.toString()) : 0;
-            
+
             // Bs → USD: Bs / tasa_zelle
             if (zelleRate > 0) {
                 const usd = bs / zelleRate;
@@ -318,13 +320,12 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                                 setCalculatorType('actual');
                                 handleClear();
                             }}
-                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                calculatorType === 'actual'
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${calculatorType === 'actual'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
                         >
-                            
+
                             <span>Actual</span>
                         </button>
                         <button
@@ -332,13 +333,12 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                                 setCalculatorType('dolares');
                                 handleClear();
                             }}
-                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                calculatorType === 'dolares'
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${calculatorType === 'dolares'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
                         >
-                            
+
                             <span>Dólares</span>
                         </button>
                         <button
@@ -346,11 +346,10 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                                 setCalculatorType('paypal');
                                 handleClear();
                             }}
-                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                calculatorType === 'paypal'
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${calculatorType === 'paypal'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
                         >
                             <span>💳</span>
                             <span>PayPal</span>
@@ -360,11 +359,10 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                                 setCalculatorType('zelle');
                                 handleClear();
                             }}
-                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                                calculatorType === 'zelle'
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1.5 ${calculatorType === 'zelle'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
                         >
                             <span>⚡</span>
                             <span>Zelle</span>
@@ -383,12 +381,11 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                     {(calculatorType === 'dolares' || calculatorType === 'paypal' || calculatorType === 'zelle') && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                🇺🇸 Dólares (USD)
+                                Dólares (USD)
                             </label>
                             <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium flex items-center gap-1">
-                                    <span className="text-lg">🇺🇸</span>
-                                    <span>$</span>
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-lg">
+                                    $
                                 </span>
                                 <input
                                     type="text"
@@ -416,12 +413,11 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                             {calculatorType === 'actual' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        🇨🇴 Pesos Colombianos (COP)
+                                        Pesos Colombianos (COP)
                                     </label>
                                     <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium flex items-center gap-1">
-                                            <span className="text-lg">🇨🇴</span>
-                                            <span>$</span>
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-lg">
+                                            $
                                         </span>
                                         <input
                                             type="text"
@@ -450,12 +446,11 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                             {calculatorType === 'dolares' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        🇨🇴 Pesos Colombianos (COP)
+                                        Pesos Colombianos (COP)
                                     </label>
                                     <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium flex items-center gap-1">
-                                            <span className="text-lg">🇨🇴</span>
-                                            <span>$</span>
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-lg">
+                                            $
                                         </span>
                                         <input
                                             type="text"
@@ -494,12 +489,11 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
                     {/* Bs Input/Result */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            🇻🇪 Bolívares (Bs)
+                            Bolívares (Bs)
                         </label>
                         <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium flex items-center gap-1">
-                                <span className="text-lg">🇻🇪</span>
-                                <span>Bs</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-lg">
+                                Bs
                             </span>
                             <input
                                 type="number"
@@ -526,83 +520,83 @@ export default function ExchangeCalculator({ rates, isOpen, onClose }: ExchangeC
 
                     {/* Info Box */}
                     {((calculatorType === 'actual' && amountCOP && amountBs) ||
-                      (calculatorType === 'dolares' && (amountUSD || amountCOP || amountBs)) ||
-                      ((calculatorType === 'paypal' || calculatorType === 'zelle') && amountUSD && amountBs)) && (
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
-                            {calculatorType === 'actual' && (
-                                <p className="text-sm text-gray-700">
-                                    <span className="font-bold">🇨🇴 ${amountCOP} COP</span>
-                                    {' '}equivale a{' '}
-                                    <span className="font-bold">🇻🇪 {parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
-                                </p>
-                            )}
-                            {calculatorType === 'dolares' && (amountUSD || amountCOP || amountBs) && (
-                                <div className="space-y-1">
+                        (calculatorType === 'dolares' && (amountUSD || amountCOP || amountBs)) ||
+                        ((calculatorType === 'paypal' || calculatorType === 'zelle') && amountUSD && amountBs)) && (
+                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4">
+                                {calculatorType === 'actual' && (
                                     <p className="text-sm text-gray-700">
-                                        {amountUSD && (
-                                            <>
-                                                <span className="font-bold">🇺🇸 ${amountUSD} USD</span>
-                                                {(amountCOP || amountBs) && ' equivale a '}
-                                                {amountCOP && <span className="font-bold">🇨🇴 ${amountCOP} COP</span>}
-                                                {amountCOP && amountBs && ' y '}
-                                                {amountBs && <span className="font-bold">🇻🇪 {parseInt(amountBs).toLocaleString('es-CO')} Bs</span>}
-                                            </>
-                                        )}
-                                        {!amountUSD && amountCOP && (
-                                            <>
-                                                <span className="font-bold">🇨🇴 ${amountCOP} COP</span>
-                                                {' equivale a '}
-                                                {amountUSD && <span className="font-bold">🇺🇸 ${amountUSD} USD</span>}
-                                                {amountUSD && amountBs && ' y '}
-                                                {amountBs && <span className="font-bold">🇻🇪 {parseInt(amountBs).toLocaleString('es-CO')} Bs</span>}
-                                            </>
-                                        )}
-                                        {!amountUSD && !amountCOP && amountBs && (
-                                            <>
-                                                <span className="font-bold">🇻🇪 {parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
-                                                {' equivale a '}
-                                                {amountUSD && <span className="font-bold">🇺🇸 ${amountUSD} USD</span>}
-                                                {amountUSD && amountCOP && ' y '}
-                                                {amountCOP && <span className="font-bold">🇨🇴 ${amountCOP} COP</span>}
-                                            </>
-                                        )}
+                                        <span className="font-bold flex items-center gap-1 inline-flex"> ${amountCOP} COP</span>
+                                        {' '}equivale a{' '}
+                                        <span className="font-bold flex items-center gap-1 inline-flex">{parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
                                     </p>
-                                    <div className="text-xs text-gray-500 space-y-0.5">
-                                        {amountUSD && amountCOP && (
-                                            <p>
-                                                COP: USD × Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) × Tasa Actual ({rates.actual?.saleRate ? parseFloat(rates.actual.saleRate.toString()).toFixed(2) : 'N/A'}) = COP
-                                            </p>
-                                        )}
-                                        {amountUSD && amountBs && (
-                                            <p>
-                                                Bs: USD × Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) = Bs
-                                            </p>
-                                        )}
-                                        {!amountUSD && amountCOP && (
-                                            <p>
-                                                USD: COP ÷ (Banco Central × Tasa Actual) = USD
-                                            </p>
-                                        )}
-                                        {!amountUSD && amountBs && (
-                                            <p>
-                                                USD: Bs ÷ Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) = USD
-                                            </p>
-                                        )}
+                                )}
+                                {calculatorType === 'dolares' && (amountUSD || amountCOP || amountBs) && (
+                                    <div className="space-y-1">
+                                        <p className="text-sm text-gray-700">
+                                            {amountUSD && (
+                                                <>
+                                                    <span className="font-bold">${amountUSD} USD</span>
+                                                    {(amountCOP || amountBs) && ' equivale a '}
+                                                    {amountCOP && <span className="font-bold ml-1">${amountCOP} COP</span>}
+                                                    {amountCOP && amountBs && ' y '}
+                                                    {amountBs && <span className="font-bold ml-1">{parseInt(amountBs).toLocaleString('es-CO')} Bs</span>}
+                                                </>
+                                            )}
+                                            {!amountUSD && amountCOP && (
+                                                <>
+                                                    <span className="font-bold">${amountCOP} COP</span>
+                                                    {' equivale a '}
+                                                    {amountUSD && <span className="font-bold ml-1">${amountUSD} USD</span>}
+                                                    {amountUSD && amountBs && ' y '}
+                                                    {amountBs && <span className="font-bold ml-1">{parseInt(amountBs).toLocaleString('es-CO')} Bs</span>}
+                                                </>
+                                            )}
+                                            {!amountUSD && !amountCOP && amountBs && (
+                                                <>
+                                                    <span className="font-bold">{parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
+                                                    {' equivale a '}
+                                                    {amountUSD && <span className="font-bold ml-1">${amountUSD} USD</span>}
+                                                    {amountUSD && amountCOP && ' y '}
+                                                    {amountCOP && <span className="font-bold ml-1">${amountCOP} COP</span>}
+                                                </>
+                                            )}
+                                        </p>
+                                        <div className="text-xs text-gray-500 space-y-0.5 pt-1">
+                                            {amountUSD && amountCOP && (
+                                                <p>
+                                                    COP: USD × Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) × Tasa Actual ({rates.actual?.saleRate ? parseFloat(rates.actual.saleRate.toString()).toFixed(2) : 'N/A'}) = COP
+                                                </p>
+                                            )}
+                                            {amountUSD && amountBs && (
+                                                <p>
+                                                    Bs: USD × Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) = Bs
+                                                </p>
+                                            )}
+                                            {!amountUSD && amountCOP && (
+                                                <p>
+                                                    USD: COP ÷ (Banco Central × Tasa Actual) = USD
+                                                </p>
+                                            )}
+                                            {!amountUSD && amountBs && (
+                                                <p>
+                                                    USD: Bs ÷ Banco Central ({rates.banco_central?.saleRate ? parseFloat(rates.banco_central.saleRate.toString()).toFixed(2) : 'N/A'}) = USD
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            {(calculatorType === 'paypal' || calculatorType === 'zelle') && amountUSD && amountBs && (
-                                <p className="text-sm text-gray-700">
-                                    <span className="font-bold">🇺🇸 ${amountUSD} USD</span>
-                                    {' '}equivale a{' '}
-                                    <span className="font-bold">🇻🇪 {parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
+                                )}
+                                {(calculatorType === 'paypal' || calculatorType === 'zelle') && amountUSD && amountBs && (
+                                    <p className="text-sm text-gray-700">
+                                        <span className="font-bold">${amountUSD} USD</span>
+                                        {' '}equivale a{' '}
+                                        <span className="font-bold">{parseInt(amountBs).toLocaleString('es-CO')} Bs</span>
+                                    </p>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {info.rateLabel}
                                 </p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-1">
-                                {info.rateLabel}
-                            </p>
-                        </div>
-                    )}
+                            </div>
+                        )}
 
                     {/* Actions */}
                     <div className="flex gap-3 pt-2">

@@ -13,6 +13,7 @@ export interface AccountTransaction {
   type: 'deposit' | 'withdrawal';
   transaction?: {
     id: number;
+    amountBs: number;
   };
   description: string;
   balanceBefore: number;

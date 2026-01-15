@@ -201,10 +201,10 @@ export default function TransactionList({
                                         <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                                             {transaction.isPaidByVendor && transaction.vendorPaymentMethod ? (
                                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${transaction.vendorPaymentMethod === 'efectivo'
-                                                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                                        : transaction.vendorPaymentMethod === 'consignacion_nequi'
-                                                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                    : transaction.vendorPaymentMethod === 'consignacion_nequi'
+                                                        ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                                     }`}>
                                                     {transaction.vendorPaymentMethod === 'efectivo'
                                                         ? 'Efectivo'
@@ -384,10 +384,10 @@ export default function TransactionList({
                                         <div>
                                             <div className="text-xs text-gray-500 mb-0.5">Método de Pago</div>
                                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${tx.vendorPaymentMethod === 'efectivo'
-                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                                    : tx.vendorPaymentMethod === 'consignacion_nequi'
-                                                        ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                : tx.vendorPaymentMethod === 'consignacion_nequi'
+                                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                                 }`}>
                                                 {tx.vendorPaymentMethod === 'efectivo'
                                                     ? 'Efectivo'
@@ -561,8 +561,8 @@ export default function TransactionList({
                                                 key={page}
                                                 onClick={() => onPageChange(page as number)}
                                                 className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 ${pagination.page === page
-                                                        ? 'z-10 bg-blue-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
-                                                        : 'text-gray-900'
+                                                    ? 'z-10 bg-blue-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
+                                                    : 'text-gray-900'
                                                     }`}
                                             >
                                                 {page}

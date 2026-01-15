@@ -325,6 +325,7 @@ export class TransactionsService {
     if (file && vendorPaymentProof) {
       const finalPath = await this.storageService.uploadFile(file, savedTransaction.id, 'cliente');
       savedTransaction.vendorPaymentProof = finalPath;
+      savedTransaction.vendorPaymentProofUrl = finalPath; // También guardar en vendorPaymentProofUrl para que aparezca en historial de pagos
       await this.transactionsRepository.save(savedTransaction);
     }
 

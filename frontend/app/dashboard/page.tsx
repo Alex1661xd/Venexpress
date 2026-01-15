@@ -240,7 +240,7 @@ export default function DashboardPage() {
                                                 ? 'Admin Colombia'
                                                 : user?.role === 'admin_venezuela'
                                                     ? 'Admin Venezuela'
-                                                    : 'Comisión (5%)'}
+                                                    : `Comisión (${user?.adminId === 1 ? '2' : '5'}%)`}
                                         </p>
                                     </div>
                                     <svg className="w-20 h-20 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -508,8 +508,8 @@ export default function DashboardPage() {
                                                         </p>
                                                         <div className="flex items-center gap-1 justify-start sm:justify-end mt-0.5">
                                                             <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${transaction.transactionType === 'dolares' ? 'bg-green-100 text-green-800' :
-                                                                    transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
-                                                                        'bg-indigo-100 text-indigo-800'
+                                                                transaction.transactionType === 'paypal' ? 'bg-purple-100 text-purple-800' :
+                                                                    'bg-indigo-100 text-indigo-800'
                                                                 }`}>
                                                                 {transaction.transactionType.toUpperCase()}
                                                             </span>

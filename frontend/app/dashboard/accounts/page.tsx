@@ -52,17 +52,17 @@ export default function AccountsPage() {
       if (transaction.bankCommissionPercentage) {
         setEditCommissionPercentage(transaction.bankCommissionPercentage.toString());
       } else {
-        setEditCommissionPercentage('3'); // Valor por defecto
+        setEditCommissionPercentage('0.3'); // Valor por defecto
       }
     } catch (error) {
       console.error('Error loading transaction commission:', error);
-      setEditCommissionPercentage('3');
+      setEditCommissionPercentage('0.3');
     }
   };
 
   const handleUpdateCommission = async () => {
     if (!selectedTransactionForCommission || !selectedTransactionForCommission.transaction) return;
-    
+
     const percentage = parseFloat(editCommissionPercentage);
     if (isNaN(percentage) || percentage < 0 || percentage > 100) {
       setAlertState({
@@ -413,6 +413,7 @@ export default function AccountsPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cuenta</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor Original</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo Resultante</th>
                   </tr>
@@ -446,6 +447,13 @@ export default function AccountsPage() {
                       <td className={`px-4 py-3 text-right font-bold ${transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
                         {transaction.type === 'deposit' ? '+' : '-'}{formatCurrency(transaction.amount)} Bs
                       </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-500">
+                        {transaction.transaction?.amountBs ? (
+                          <span>{formatCurrency(transaction.transaction.amountBs)} Bs</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">
                         {transaction.description}
                         {transaction.transaction && (
@@ -478,7 +486,7 @@ export default function AccountsPage() {
                 </tbody>
               </table>
             </div>
-            
+
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
@@ -538,9 +546,8 @@ export default function AccountsPage() {
                 setCreateFormData({ ...createFormData, initialBalance: formatted });
               }}
               placeholder="0"
-              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
-                errors.initialBalance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
-              }`}
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${errors.initialBalance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+                }`}
             />
             {errors.initialBalance && (
               <p className="text-red-600 text-xs mt-1">{errors.initialBalance}</p>
@@ -595,9 +602,8 @@ export default function AccountsPage() {
                 setAddBalanceFormData({ ...addBalanceFormData, amount: formatted });
               }}
               placeholder="0"
-              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
-                errors.amount ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
-              }`}
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${errors.amount ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+                }`}
             />
             {errors.amount && (
               <p className="text-red-600 text-xs mt-1">{errors.amount}</p>
@@ -666,9 +672,8 @@ export default function AccountsPage() {
                 setUpdateBalanceFormData({ ...updateBalanceFormData, balance: formatted });
               }}
               placeholder="0"
-              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${
-                errors.balance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
-              }`}
+              className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-100 transition-all outline-none ${errors.balance ? 'border-red-300 focus:border-red-500' : 'border-gray-200 focus:border-blue-500'
+                }`}
             />
             {errors.balance && (
               <p className="text-red-600 text-xs mt-1">{errors.balance}</p>
@@ -740,11 +745,11 @@ export default function AccountsPage() {
                     setEditCommissionPercentage(value);
                   }
                 }}
-                placeholder="3.00"
+                placeholder="0.3"
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none text-lg font-semibold"
               />
               <p className="mt-2 text-xs text-gray-500">
-                Ingresa el porcentaje de comisión bancaria (ej: 3.00 para 3%)
+                Ingresa el porcentaje de comisión bancaria (ej: 0.3 para 0.3%)
               </p>
             </div>
 

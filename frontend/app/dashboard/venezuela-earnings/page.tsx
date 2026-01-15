@@ -22,7 +22,7 @@ export default function VenezuelaEarningsPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    
+
     if (!user || user.role !== 'admin_venezuela') {
       router.push('/dashboard');
       return;
@@ -161,21 +161,19 @@ export default function VenezuelaEarningsPage() {
           <div className="flex gap-2 sm:items-end">
             <button
               onClick={handleTodayFilter}
-              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg font-medium transition-colors ${
-                showToday
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg font-medium transition-colors ${showToday
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               Hoy
             </button>
             <button
               onClick={handleMonthFilter}
-              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg font-medium transition-colors ${
-                !showToday
+              className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm rounded-lg font-medium transition-colors ${!showToday
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               Este Mes
             </button>
@@ -201,7 +199,7 @@ export default function VenezuelaEarningsPage() {
               <p className="text-xs opacity-75 mt-1">COP</p>
               {summary.hasTransactionsWithoutPurchaseRate && (
                 <p className="text-xs text-green-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
-                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva.
                   {summary.transactionsWithoutPurchaseRateCount && (
                     <> {summary.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
                   )}
@@ -212,7 +210,7 @@ export default function VenezuelaEarningsPage() {
             {/* Deuda Total de Colombia */}
             <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium opacity-90">Deuda de Colombia</h3>
+                <h3 className="text-sm font-medium opacity-90">Deuda de Colombia-Armando</h3>
                 <svg className="w-8 h-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
@@ -223,7 +221,7 @@ export default function VenezuelaEarningsPage() {
               <p className="text-xs opacity-75 mt-1">COP</p>
               {summary.hasTransactionsWithoutPurchaseRate && (
                 <p className="text-xs text-amber-100 mt-2 bg-white/20 px-2 py-1 rounded border border-white/30">
-                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva. 
+                  ⚠️ Calculado solo de transacciones con tasa de compra definitiva.
                   {summary.transactionsWithoutPurchaseRateCount && (
                     <> {summary.transactionsWithoutPurchaseRateCount} transacción(es) pendiente(s) de tasa.</>
                   )}
@@ -234,7 +232,7 @@ export default function VenezuelaEarningsPage() {
             {/* Total Pagado */}
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium opacity-90">Pagado</h3>
+                <h3 className="text-sm font-medium opacity-90">Pagado de Colombia-Armando</h3>
                 <svg className="w-8 h-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -248,7 +246,7 @@ export default function VenezuelaEarningsPage() {
             {/* Deuda Pendiente */}
             <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg p-6 text-white">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium opacity-90">Pendiente</h3>
+                <h3 className="text-sm font-medium opacity-90">Pendiente de Colombia-Armando</h3>
                 <svg className="w-8 h-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -261,24 +259,10 @@ export default function VenezuelaEarningsPage() {
           </div>
 
           {/* Desglose de Ganancias */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Ganancias de Admin Colombia (50/50) */}
-            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium opacity-90">Ganancias de Admin Colombia</h3>
-                <svg className="w-8 h-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <p className="text-3xl font-bold">
-                ${summary.totalEarningsFromColombia.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-              </p>
-              <p className="text-xs opacity-75 mt-1">50/50 del sistema (COP)</p>
-              <p className="text-xs opacity-75 mt-2">Proviene del cálculo: (COP - Inversión) ÷ 2</p>
-            </div>
+          <div className="grid grid-cols-1 gap-4">
 
             {/* Ganancias de sus Vendedores (5%) - Clickeable */}
-            <div 
+            <div
               className="bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl shadow-lg p-6 text-white cursor-pointer hover:from-violet-600 hover:to-violet-700 transition-all transform hover:scale-105"
               onClick={() => setShowVendorBreakdown(true)}
             >
@@ -503,11 +487,10 @@ export default function VenezuelaEarningsPage() {
                           ${detail.amountCOP.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                         </td>
                         <td className="px-2 sm:px-3 py-2 text-center">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
-                            detail.hasCustomRate 
-                              ? 'bg-purple-100 text-purple-800' 
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${detail.hasCustomRate
+                              ? 'bg-purple-100 text-purple-800'
                               : 'bg-blue-100 text-blue-800'
-                          }`}>
+                            }`}>
                             {detail.commissionRate}%
                             {detail.hasCustomRate && ' ⚡'}
                           </span>
@@ -737,11 +720,10 @@ export default function VenezuelaEarningsPage() {
                               ${detail.amountCOP.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <span className={`inline-block px-2 py-1 text-xs font-bold rounded ${
-                                detail.hasCustomRate 
-                                  ? 'bg-amber-100 text-amber-800' 
+                              <span className={`inline-block px-2 py-1 text-xs font-bold rounded ${detail.hasCustomRate
+                                  ? 'bg-amber-100 text-amber-800'
                                   : 'bg-blue-100 text-blue-800'
-                              }`}>
+                                }`}>
                                 {detail.commissionRate}%
                               </span>
                             </td>

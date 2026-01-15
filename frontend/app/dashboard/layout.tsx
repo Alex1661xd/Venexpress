@@ -125,7 +125,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             name: 'Saldos',
             href: '/dashboard/accounts',
             roles: ['admin_venezuela'],
-            isSecondary: true,
             icon: (
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
@@ -378,7 +377,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </svg>
             ),
         },
-        
+
         {
             name: 'Reportes',
             href: '/dashboard/reports',
@@ -394,7 +393,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </svg>
             ),
         },
-        
+
         // --- Navegación de Admin Colombia (Secundarias - en "Otros") ---
         {
             name: 'Clientes',
@@ -465,10 +464,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Filtrar navegación según el rol del usuario
     const allFilteredNavigation = allNavigation.filter(item => {
         if (!item.roles) return true; // Si no tiene roles definidos, mostrar a todos
-        
+
         // Verificar si el item tiene el rol requerido
         if (!item.roles.includes(user.role)) return false;
-        
+
         // Si el item solo debe mostrarse a vendedores de admin_colombia
         if (item.showOnlyForAdminColombiaVendors) {
             // Solo mostrar si es vendedor Y (adminId es 1, null, undefined o 2 para admin venezuela)
@@ -479,14 +478,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }
             return false;
         }
-        
+
         return true;
     });
 
     // Separar navegación principal y secundaria
     const primaryNavigation = allFilteredNavigation.filter(item => !item.isSecondary);
     const secondaryNavigation = allFilteredNavigation.filter(item => item.isSecondary);
-    
+
     // Navegación a mostrar (solo primaria, las secundarias se muestran debajo cuando showMoreMenu está activo)
     const navigation = primaryNavigation;
 
@@ -541,7 +540,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </Link>
                         );
                     })}
-                    
+
                     {/* Botón "Más opciones" */}
                     {secondaryNavigation.length > 0 && (
                         <button
@@ -554,7 +553,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <span>{showMoreMenu ? 'Menos opciones' : 'Más opciones'}</span>
                         </button>
                     )}
-                    
+
                     {/* Opciones secundarias - aparecen debajo cuando showMoreMenu está activo */}
                     {showMoreMenu && secondaryNavigation.length > 0 && (
                         <div className="space-y-2 pt-2 border-t border-gray-200">
@@ -567,9 +566,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         className={`
                       flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200
                       ${isActive
-                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
-                                            : 'text-gray-700 hover:bg-gray-100'
-                                        }
+                                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                                                : 'text-gray-700 hover:bg-gray-100'
+                                            }
                     `}
                                     >
                                         {item.icon}
@@ -627,7 +626,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     </Link>
                                 );
                             })}
-                            
+
                             {/* Botón "Más opciones" (móvil) */}
                             {secondaryNavigation.length > 0 && (
                                 <button
@@ -640,7 +639,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     <span className="text-sm sm:text-base">{showMoreMenu ? 'Menos opciones' : 'Más opciones'}</span>
                                 </button>
                             )}
-                            
+
                             {/* Opciones secundarias - aparecen debajo cuando showMoreMenu está activo (móvil) */}
                             {showMoreMenu && secondaryNavigation.length > 0 && (
                                 <div className="space-y-2 pt-2 border-t border-gray-200">
