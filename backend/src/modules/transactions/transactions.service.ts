@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Between } from 'typeorm';
 import { Transaction } from './entities/transaction.entity';
@@ -683,8 +684,51 @@ export class TransactionsService {
     return diffMinutes < 5;
   }
 
+
+
+  /**
+   * Tarea programada: Revisa cada minuto las transacciones pendientes que ya superaron los 5 minutos
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async checkPendingTransactions() {
+    this.logger.debug('Revisando transacciones pendientes para actualización automática...');
+
+    const pendingTransactions = await this.transactionsRepository.find({
+      where: { status: TransactionStatus.PENDIENTE },
+      relations: ['createdBy'], // Necesario para el log o historial
+    });
+
+    let updatedCount = 0;
+
+    for (const transaction of pendingTransactions) {
+      // Usamos la lógica existente de canEdit para verificar el tiempo
+      if (!this.canEdit(transaction)) {
+        transaction.status = TransactionStatus.PENDIENTE_VENEZUELA;
+        await this.transactionsRepository.save(transaction);
+
+        // Creamos entrada en historial usando un ID de sistema o del creador si está disponible
+        // Usamos el ID del creador para indicar que fue "automático" en su nombre, o 1 (Admin) como fallback
+        const userId = transaction.createdBy?.id || 1;
+
+        await this.createHistoryEntry(
+          transaction.id,
+          TransactionStatus.PENDIENTE_VENEZUELA,
+          'Estado actualizado automáticamente por sistema (Cron 5 min)',
+          userId,
+        );
+
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      this.logger.log(`Se actualizaron ${updatedCount} transacciones a PENDIENTE_VENEZUELA automáticamente.`);
+    }
+  }
+
   /**
    * Actualiza el estado de una transacción si han pasado 5 minutos
+   * (Se mantiene como respaldo o para actualización inmediata al consultar)
    */
   async autoUpdateStatusIfNeeded(transaction: Transaction, userId: number): Promise<Transaction> {
     if (transaction.status === TransactionStatus.PENDIENTE && !this.canEdit(transaction)) {

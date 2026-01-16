@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { typeOrmConfig } from './config/database.config';
 
 // Módulos
@@ -36,8 +37,13 @@ import { AccountsModule } from './modules/accounts/accounts.module';
     RatesModule,
     ProofsModule,
     NotificationsModule,
+    ProofsModule,
+    NotificationsModule,
     AccountsModule,
+
+    // Tareas programadas
+    ScheduleModule.forRoot(),
   ],
 })
-export class AppModule {}
+export class AppModule { }
 
